@@ -1,53 +1,81 @@
 from rest_framework import serializers
-from .models import User, DriverProfile
-from .forms import SendOTPForm, VerifyOTPForm, DriverRegistrationForm
+from .models import *
+import re
 
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['id', 'email', 'phone_number', 'name', 'role', 'is_active']
+# ---------------- REGISTER ----------------
+class RegisterSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    phone = serializers.CharField(max_length=10)
+    otp = serializers.CharField(max_length=6)
 
+    def validate_phone(self, value):
+        if not re.match(r'^[6-9]\d{9}$', value):
+            raise serializers.ValidationError("Invalid Indian phone number")
+        return value
+
+    def validate(self, data):
+        if User.objects.filter(email=data['email']).exists():
+            raise serializers.ValidationError("Email already exists")
+
+        if User.objects.filter(phone=data['phone']).exists():
+            raise serializers.ValidationError("Phone already exists")
+
+        return data
+
+
+# ---------------- LOGIN ----------------
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=6)
+
+
+# ---------------- DRIVER ----------------
 class DriverProfileSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    name = serializers.CharField(write_only=True, required=False)
-    email = serializers.EmailField(write_only=True, required=False)
-    phone_number = serializers.CharField(write_only=True, required=False)
-
     class Meta:
         model = DriverProfile
         fields = '__all__'
+        read_only_fields = ['user']
+    def validate_vehicle_number(self, value):
+    # 🔥 HANDLE EMPTY / NULL
+        if not value:
+           raise serializers.ValidationError("Vehicle number is required")
 
-    def validate(self, data):
-        # We use the form to validate the driver registration data
-        # Note: In a real scenario, we might only pass partial data if it's an update
-        # But for creation, we need all.
-        if self.context['request'].method == 'POST':
-            # Check for name/email/phone if new user
-            pass
-        return data
+    # 🔥 NORMALIZE INPUT
+        value = value.strip().upper()              # remove spaces at ends
+        value = re.sub(r'[\s-]', '', value)        # remove spaces & dashes inside
 
-    def create(self, validated_data):
-        # The form has a save() method that handles User + DriverProfile
-        # But here we are already authenticated in the view
-        return super().create(validated_data)
+    # ✅ STRICT INDIAN VEHICLE FORMAT
+        pattern = r'^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}$'
 
-class SendOTPSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True)
-    phone_number = serializers.CharField(max_length=15, required=False)
-    name = serializers.CharField(max_length=255, required=False)
+        if not re.fullmatch(pattern, value):       # 🔥 use fullmatch (better than match)
+           raise serializers.ValidationError(
+            "Invalid vehicle number (e.g. TS09AB1234)"
+        )
 
-    def validate(self, data):
-        form = SendOTPForm(data={'email': data.get('email')})
-        if not form.is_valid():
-            raise serializers.ValidationError(form.errors)
-        return data
+        return value  # ✅ cleaned value saved in DB
 
-class VerifyOTPSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True)
-    otp = serializers.CharField(max_length=6, min_length=6, required=True)
+class PassengerProfileSerializer(serializers.ModelSerializer):
+    profile_image = serializers.ImageField(source='profile.image', read_only=True)
 
-    def validate(self, data):
-        form = VerifyOTPForm(data=data)
-        if not form.is_valid():
-            raise serializers.ValidationError(form.errors)
-        return data
+    class Meta:
+        model = User
+        fields = ['email', 'phone', 'role', 'profile_image']
+
+
+# ---------------- DRIVER VIEW ----------------
+class DriverProfileViewSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(source='user.email')
+    phone = serializers.CharField(source='user.phone')
+    role = serializers.CharField(source='user.role')  # ✅ IMPORTANT
+
+    class Meta:
+        model = DriverProfile
+        fields = [
+            'email',
+            'phone',
+            'role',
+            'vehicle_number',
+            'dl_image',
+            'rc_image',
+            'profile_image'
+        ]

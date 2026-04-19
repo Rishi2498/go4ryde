@@ -1,6 +1,6 @@
-from django.urls import path
-from tracking.consumers import TrackingConsumer
+from django.urls import re_path
+from .consumers import RideTrackingConsumer
 
 websocket_urlpatterns = [
-    path('ws/tracking/<int:ride_id>/', TrackingConsumer.as_asgi()),
+    re_path(r'ws/tracking/(?P<ride_id>\d+)/$', RideTrackingConsumer.as_asgi()),
 ]

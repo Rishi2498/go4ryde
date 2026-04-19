@@ -9,3 +9,6 @@ razorpay
 googlemaps
 django-filter
 Pillow
+django-jet-reboot
+django-extensions
+channels    

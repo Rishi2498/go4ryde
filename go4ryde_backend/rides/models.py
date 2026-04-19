@@ -1,51 +1,92 @@
 from django.db import models
-from accounts.models import DriverProfile
-import json
+from django.conf import settings
+
+User = settings.AUTH_USER_MODEL
 
 
 class Ride(models.Model):
-    RIDE_TYPE_CHOICES = (
-        ('local', 'Local'),
-        ('intercity', 'Intercity'),
+    STATUS_CHOICES = (
+        ('CREATED', 'Created'),     # 🔥 NEW
+        ('STARTED', 'Started'),     # 🔥 NEW
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
     )
 
-    driver = models.ForeignKey(DriverProfile, on_delete=models.CASCADE, related_name='rides')
-    ride_type = models.CharField(max_length=10, choices=RIDE_TYPE_CHOICES, default='local')
-    source_name = models.CharField(max_length=255)
-    destination_name = models.CharField(max_length=255)
+    driver = models.ForeignKey(User, on_delete=models.CASCADE, related_name="rides")
 
+    # 📍 Location Info
+    source = models.CharField(max_length=500)
     source_lat = models.FloatField()
     source_lng = models.FloatField()
-    dest_lat = models.FloatField()
-    dest_lng = models.FloatField()
 
-    stops = models.JSONField(default=list, blank=True, help_text='List of stops: [{"name": "...", "lat": ..., "lng": ...}]')
-    route_polyline = models.TextField(blank=True, default='')
+    destination = models.CharField(max_length=500)
+    destination_lat = models.FloatField()
+    destination_lng = models.FloatField()
 
-    departure_time = models.DateTimeField()
-    available_seats = models.PositiveIntegerField()
-    total_seats = models.PositiveIntegerField()
-    women_only = models.BooleanField(default=False)
-    price_per_seat = models.DecimalField(max_digits=10, decimal_places=2)
+    # 📏 Route Info
+    distance_km = models.FloatField(null=True, blank=True)
+    duration_min = models.FloatField(null=True, blank=True)
+    route_geometry = models.JSONField(null=True, blank=True)
 
-    is_active = models.BooleanField(default=True)
+    # ⏰ Ride Timing
+    date_time = models.DateTimeField()
+
+    # 💰 Pricing
+    price_per_seat = models.DecimalField(max_digits=7, decimal_places=2)
+
+    # 🪑 Seats
+    seats_available = models.PositiveIntegerField()
+    seats_booked = models.PositiveIntegerField(default=0)
+
+    # 🚦 Status
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='CREATED'   # 🔥 IMPORTANT CHANGE
+    )
+
+    # 🕒 Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # -------------------------
+    # 🔥 BUSINESS LOGIC
+    # -------------------------
+
+    def seats_remaining(self):
+        return self.seats_available - self.seats_booked
+
+    def is_full(self):
+        return self.seats_booked >= self.seats_available
+
+    def can_book(self, seats=1):
+        return self.seats_remaining() >= seats and self.status == 'CREATED'
+
+    def book_seat(self, seats=1):
+        if not self.can_book(seats):
+            raise ValueError("Not enough seats available or ride not active")
+
+        self.seats_booked += seats
+        self.save()
+
+    def start_ride(self):   # 🔥 NEW METHOD
+        self.status = "STARTED"
+        self.save()
+
+    def complete_ride(self):
+        self.status = 'COMPLETED'
+        self.save()
+
+    def cancel_ride(self):
+        self.status = 'CANCELLED'
+        self.save()
+
     def __str__(self):
-        return f"{self.source_name} to {self.destination_name} by {self.driver.user.name}"
+        return f"{self.source} → {self.destination} ({self.date_time})"
 
 
-class Review(models.Model):
-    ride = models.ForeignKey(Ride, on_delete=models.CASCADE, related_name='reviews')
-    reviewer = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='given_reviews')
-    driver = models.ForeignKey(DriverProfile, on_delete=models.CASCADE, related_name='received_reviews')
-    rating = models.PositiveIntegerField(choices=[(i, str(i)) for i in range(1, 6)])
-    comment = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ('ride', 'reviewer')
-
-    def __str__(self):
-        return f"Review by {self.reviewer.name} for {self.driver.user.name}"
+class DriverLocation(models.Model):
+    ride = models.ForeignKey(Ride, on_delete=models.CASCADE)
+    lat = models.FloatField()
+    lng = models.FloatField()
+    updated_at = models.DateTimeField(auto_now=True)

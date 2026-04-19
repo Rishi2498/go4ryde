@@ -1,14 +1,22 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import (
-    CreateRideView, SearchRideView, RideDetailView,
-    DriverRidesView, ReviewCreateView, RideReviewsView,
+    RideViewSet,
+    calculate_route,
+    accept_booking,
+    start_ride
 )
 
+router = DefaultRouter()
+router.register("", RideViewSet, basename="rides")
+
 urlpatterns = [
-    path('rides/create/', CreateRideView.as_view(), name='create-ride'),
-    path('rides/search/', SearchRideView.as_view(), name='search-ride'),
-    path('rides/<int:pk>/', RideDetailView.as_view(), name='ride-detail'),
-    path('rides/my-rides/', DriverRidesView.as_view(), name='driver-rides'),
-    path('rides/<int:pk>/reviews/', RideReviewsView.as_view(), name='ride-reviews'),
-    path('reviews/create/', ReviewCreateView.as_view(), name='create-review'),
+    path("", include(router.urls)),
+
+    # 📍 ROUTE PREVIEW
+    path("calculate-route/", calculate_route),
+
+    # 🚗 BOOKING ACTIONS
+    path("accept/<int:booking_id>/", accept_booking),
+    path("start/<int:booking_id>/", start_ride),
 ]

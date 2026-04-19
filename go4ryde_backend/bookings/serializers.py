@@ -1,37 +1,72 @@
 from rest_framework import serializers
-from .models import Booking, BookingCancellation
-from rides.serializers import RideSerializer
-from accounts.serializers import UserSerializer
-from .forms import BookingForm
+from .models import Booking
 
 
-class BookingSerializer(serializers.ModelSerializer):
-    passenger = UserSerializer(read_only=True)
-    ride_details = RideSerializer(source='ride', read_only=True)
-    ride_id = serializers.IntegerField(write_only=True)
-    payment_method = serializers.CharField(write_only=True, required=False)
+class CreateBookingSerializer(serializers.ModelSerializer):
+    coupon_code = serializers.CharField(required=False)
+    seats = serializers.IntegerField()
+    seats_remaining = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
-        fields = ['id', 'ride_id', 'ride_details', 'passenger', 'seats', 'total_price', 'status', 'created_at', 'payment_method']
-        read_only_fields = ['id', 'passenger', 'total_price', 'status', 'created_at']
+        fields = [
+            "ride",
+            "seats",
+            "coupon_code",
+            "seats_remaining"
+        ]
+
+    def get_seats_remaining(self, obj):
+        return obj.seats_remaining()
 
     def validate(self, data):
-        # Use BookingForm for validation
-        user = self.context['request'].user
-        form_data = {
-            'ride': data.get('ride_id'),
-            'seats': data.get('seats'),
-            'payment_method': data.get('payment_method', 'razorpay'),
-        }
-        form = BookingForm(data=form_data, user=user)
-        if not form.is_valid():
-            raise serializers.ValidationError(form.errors)
+        ride = data["ride"]
+        seats = data["seats"]
+
+        # ❌ Ride not active
+        if ride.status != "ACTIVE":
+            raise serializers.ValidationError("Ride is not available")
+
+        # ❌ Not enough seats
+        if not ride.can_book(seats):
+            raise serializers.ValidationError("Not enough seats available")
+
         return data
 
+class BookingMiniSerializer(serializers.ModelSerializer):
+    user_email = serializers.EmailField(source="user.email")
 
-class BookingCancellationSerializer(serializers.ModelSerializer):
+    # 🔥 ADD THIS (VERY IMPORTANT)
+    ride_id = serializers.IntegerField(source="ride.id", read_only=True)
+
     class Meta:
-        model = BookingCancellation
-        fields = ['id', 'booking', 'reason', 'penalty_applied', 'cancelled_at']
-        read_only_fields = ['id', 'penalty_applied', 'cancelled_at']
+        model = Booking
+        fields = [
+            "id",
+            "user_email",
+            "seats",
+            "status",
+            "ride_id"   # ✅ REQUIRED
+        ]
+
+class BookingSerializer(serializers.ModelSerializer):
+    user_email = serializers.EmailField(source="user.email")
+
+    # 🔥 CRITICAL FIELD
+    ride_id = serializers.IntegerField(source="ride.id", read_only=True)
+
+    # optional display
+    ride = serializers.StringRelatedField()
+
+    class Meta:
+        model = Booking
+        fields = [
+            "id",
+            "ride",
+            "ride_id",          # ✅ MUST
+            "seats",
+            "status",
+            "payment_status",
+            "amount",
+            "user_email"
+        ]

@@ -15,7 +15,9 @@ from datetime import timedelta
 import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+#BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 
 # Quick-start development settings - unsuitable for production
@@ -27,7 +29,7 @@ SECRET_KEY = 'django-insecure-kpvniqzq#!!^jp(s)o+sathi&wfa)w&#@c(o9^l3+*p&sm00!2
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -45,16 +47,20 @@ INSTALLED_APPS = [
     # Third party
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'django_filters',
     'django_extensions',
+    'channels',
     # Local apps
     'accounts',
     'rides',
     'bookings',
     'payments',
+    'coupons',
+    'chat',
     'tracking',
-    'notifications',
+    'core',
 ]
 
 MIDDLEWARE = [
@@ -73,7 +79,8 @@ ROOT_URLCONF = 'go4ryde_backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        #'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -94,7 +101,11 @@ ASGI_APPLICATION = 'go4ryde_backend.asgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        #'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'OPTIONS': {
+            'timeout': 20,  # 🔥 increase wait time
+        }
     }
 }
 
@@ -123,7 +134,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 
@@ -133,11 +144,15 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_URL = '/static/'  # Ensure this starts with a leading slash
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),  # Ensure this directory exists
+]
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# Media files (uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -153,15 +168,17 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=6000),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-ALLOWED_HOSTS = ['*']
 
 # Channels Layer (Using In-Memory for easier local development without Redis)
 CHANNEL_LAYERS = {
@@ -170,7 +187,27 @@ CHANNEL_LAYERS = {
     },
 }
 
+ASGI_APPLICATION = "go4ryde_backend.asgi.application"
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
+
 # API Keys
-RAZORPAY_KEY_ID = 'your_razorpay_key_id'
-RAZORPAY_KEY_SECRET = 'your_razorpay_key_secret'
-GOOGLE_MAPS_API_KEY = 'your_google_maps_api_key'
+RAZORPAY_KEY_ID = 'rzp_test_SV8GuVVRipG8sE'
+RAZORPAY_KEY_SECRET = 'WAzDnsT4W10dVI60eLGlVyEl'
+OPS_MAPS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImIyYzIzYWEwZTI0NTQ2YTY5ZjhiNzExNGZlNTc4YmVmIiwiaCI6Im11cm11cjY0In0='
+GOOGLE_MAPS_API_KEY = 'AIzaSyB4pCEdwk8UuHDtT9gtzmi9UBlCZxLYI1k'
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'dattarishikesh2498@gmail.com'
+EMAIL_HOST_PASSWORD = 'oohv peol mpwr dcau'
+DEFAULT_FROM_EMAIL = 'dattarishikesh2498@gmail.com'

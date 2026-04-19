@@ -1,139 +1,166 @@
-import math
-from datetime import timedelta
-
-from rest_framework import generics, status, serializers
-from rest_framework.views import APIView
+from rest_framework import viewsets, permissions
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+from django.conf import settings
+from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
-from django.utils.dateparse import parse_datetime
+import requests
+import logging
 
-from .models import Ride, Review
-from .serializers import RideSerializer, ReviewSerializer
-from accounts.models import DriverProfile
-from .forms import SearchRideForm
+from .models import *
+from bookings.models import *
+from .serializers import *
 
-
-# --------------- Haversine helper ---------------
-
-def calculate_distance(lat1, lon1, lat2, lon2):
-    """Return distance between two points in kilometres using the Haversine formula."""
-    R = 6371  # Earth radius in km
-    d_lat = math.radians(lat2 - lat1)
-    d_lon = math.radians(lon2 - lon1)
-    a = (math.sin(d_lat / 2) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(d_lon / 2) ** 2)
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
+logger = logging.getLogger(__name__)
 
 
-# --------------- Ride views ---------------
-
-class CreateRideView(generics.CreateAPIView):
+# -------------------------
+# 🚀 VIEWSET
+# -------------------------
+class RideViewSet(viewsets.ModelViewSet):
+    queryset = Ride.objects.all().prefetch_related("bookings")
     serializer_class = RideSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
+    # -------------------------
+    # 🔥 MY RIDES
+    # -------------------------
+    @action(detail=False, methods=["get"])
+    def my_rides(self, request):
+        rides = Ride.objects.filter(driver=request.user).order_by("-created_at")
+        serializer = self.get_serializer(rides, many=True)
+        return Response(serializer.data)
+
+    
+    # -------------------------
+    # 🚀 CREATE RIDE
+    # -------------------------
+    @transaction.atomic
     def perform_create(self, serializer):
-        user = self.request.user
+        ride = serializer.save(driver=self.request.user)
+
+        if not all([
+            ride.source_lat,
+            ride.source_lng,
+            ride.destination_lat,
+            ride.destination_lng
+        ]):
+            logger.warning("Missing coordinates")
+            return
+
         try:
-            driver_profile = user.driver_profile
-        except DriverProfile.DoesNotExist:
-            raise serializers.ValidationError("Only registered drivers can create rides.")
+            res = requests.get(
+                "https://maps.googleapis.com/maps/api/directions/json",
+                params={
+                    "origin": f"{ride.source_lat},{ride.source_lng}",
+                    "destination": f"{ride.destination_lat},{ride.destination_lng}",
+                    "key": settings.GOOGLE_MAPS_API_KEY
+                },
+                timeout=10
+            ).json()
 
-        if driver_profile.status != 'approved':
-            raise serializers.ValidationError("Admin approval required before driver can create rides.")
+            if res.get("status") != "OK":
+                logger.error(res)
+                return
 
-        serializer.save(driver=driver_profile)
+            route = res["routes"][0]["legs"][0]
 
+            ride.distance_km = round(route["distance"]["value"] / 1000, 2)
+            ride.duration_min = round(route["duration"]["value"] / 60, 2)
 
-class RideDetailView(generics.RetrieveAPIView):
-    queryset = Ride.objects.all()
-    serializer_class = RideSerializer
-    permission_classes = [IsAuthenticated]
+            ride.route_geometry = res["routes"][0].get(
+                "overview_polyline", {}
+            ).get("points")
 
+            if not ride.price_per_seat:
+                ride.price_per_seat = round(50 + (ride.distance_km * 10), 2)
 
-class DriverRidesView(generics.ListAPIView):
-    serializer_class = RideSerializer
-    permission_classes = [IsAuthenticated]
+            ride.save()
 
-    def get_queryset(self):
-        user = self.request.user
-        try:
-            driver_profile = user.driver_profile
-        except DriverProfile.DoesNotExist:
-            return Ride.objects.none()
-        return Ride.objects.filter(driver=driver_profile).order_by('-created_at')
-
-
-class SearchRideView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        form = SearchRideForm(data=request.query_params)
-        if not form.is_valid():
-            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        cd = form.cleaned_data
-        p_source_lat = cd['source_lat']
-        p_source_lng = cd['source_lng']
-        p_dest_lat = cd['dest_lat']
-        p_dest_lng = cd['dest_lng']
-        search_time = cd['date_time']
-        women_only = cd.get('women_only', False)
-        ride_type = cd.get('ride_type')
-        vehicle_type = cd.get('vehicle_type')
-
-        time_lower = search_time - timedelta(minutes=30)
-        time_upper = search_time + timedelta(minutes=30)
-
-        # Rough bounding box first (fast DB filter), then refine with Haversine
-        lat_diff = 5.0 / 111.0
-        lng_diff = 5.0 / 111.0
-
-        rides = Ride.objects.filter(
-            is_active=True,
-            available_seats__gt=0,
-            departure_time__range=(time_lower, time_upper),
-            source_lat__range=(p_source_lat - lat_diff, p_source_lat + lat_diff),
-            source_lng__range=(p_source_lng - lng_diff, p_source_lng + lng_diff),
-            dest_lat__range=(p_dest_lat - lat_diff, p_dest_lat + lat_diff),
-            dest_lng__range=(p_dest_lng - lng_diff, p_dest_lng + lng_diff),
-        )
-
-        if women_only:
-            rides = rides.filter(women_only=True)
-        if ride_type:
-            rides = rides.filter(ride_type=ride_type)
-        if vehicle_type:
-            rides = rides.filter(driver__vehicle_type=vehicle_type)
-
-        # Refine with Haversine distance <= 5 km
-        matched_rides = []
-        for ride in rides:
-            src_dist = calculate_distance(p_source_lat, p_source_lng, ride.source_lat, ride.source_lng)
-            dest_dist = calculate_distance(p_dest_lat, p_dest_lng, ride.dest_lat, ride.dest_lng)
-            if src_dist <= 5.0 and dest_dist <= 5.0:
-                matched_rides.append(ride)
-
-        serializer = RideSerializer(matched_rides, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(str(e))
 
 
-# --------------- Review views ---------------
+# -------------------------
+# 📍 ROUTE PREVIEW
+# -------------------------
+@api_view(["POST"])
+def calculate_route(request):
 
-class ReviewCreateView(generics.CreateAPIView):
-    serializer_class = ReviewSerializer
-    permission_classes = [IsAuthenticated]
+    source = request.data.get("source")
+    destination = request.data.get("destination")
 
-    def perform_create(self, serializer):
-        ride = serializer.validated_data['ride']
-        serializer.save(reviewer=self.request.user, driver=ride.driver)
+    if not source or not destination:
+        return Response({"error": "Missing source/destination"}, status=400)
+
+    try:
+        res = requests.get(
+            "https://maps.googleapis.com/maps/api/directions/json",
+            params={
+                "origin": f"{source['lat']},{source['lng']}",
+                "destination": f"{destination['lat']},{destination['lng']}",
+                "key": settings.GOOGLE_MAPS_API_KEY
+            }
+        ).json()
+
+        route = res["routes"][0]["legs"][0]
+
+        distance = route["distance"]["value"] / 1000
+        duration = route["duration"]["value"] / 60
+
+        return Response({
+            "distance": round(distance, 2),
+            "duration": round(duration, 2),
+            "price": round(50 + distance * 10, 2)
+        })
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 
 
-class RideReviewsView(generics.ListAPIView):
-    serializer_class = ReviewSerializer
-    permission_classes = [IsAuthenticated]
+# -------------------------
+# ✅ ACCEPT BOOKING
+# -------------------------
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def accept_booking(request, booking_id):
 
-    def get_queryset(self):
-        ride_id = self.kwargs['pk']
-        return Review.objects.filter(ride_id=ride_id).order_by('-created_at')
+    booking = Booking.objects.get(id=booking_id)
+
+    if booking.ride.driver != request.user:
+        return Response({"error": "Not your ride"}, status=403)
+
+    # 🔥 AUTO ACCEPT ONLY IF PAID
+    if booking.payment_status != "PAID":
+        return Response({"error": "Payment not completed"}, status=400)
+
+    booking.status = "ACCEPTED"
+    booking.save()
+
+    return Response({"message": "Booking accepted"})
+
+
+# -------------------------
+# 🚗 START RIDE
+# -------------------------
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def start_ride(request, booking_id):
+
+    booking = Booking.objects.get(id=booking_id)
+
+    if booking.ride.driver != request.user:
+        return Response({"error": "Not your ride"}, status=403)
+
+    if booking.status != "ACCEPTED":
+        return Response({"error": "Booking must be accepted first"}, status=400)
+
+    booking.status = "STARTED"
+    booking.save()
+
+    # 🔥 update ride
+    ride = booking.ride
+    ride.status = "ACTIVE"
+    ride.save()
+
+    return Response({"message": "Ride started"})

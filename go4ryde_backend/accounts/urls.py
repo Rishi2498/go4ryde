@@ -1,13 +1,13 @@
 from django.urls import path
-from .views import (
-    SendOTPView, VerifyOTPView,
-    UserProfileView, DriverProfileCreateView, DriverProfileDetailView,
-)
+from .views import *
 
 urlpatterns = [
-    path('auth/send-otp/', SendOTPView.as_view(), name='send-otp'),
-    path('auth/verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
-    path('profile/', UserProfileView.as_view(), name='user-profile'),
-    path('driver/register/', DriverProfileCreateView.as_view(), name='driver-register'),
-    path('driver/profile/', DriverProfileDetailView.as_view(), name='driver-profile'),
+    path('send-otp/', SendOTPView.as_view()),
+    path('register/', RegisterView.as_view()),
+    path('login/', LoginView.as_view()),
+    path('driver-upgrade/', DriverUpgradeView.as_view()),
+    path('logout/', LogoutView.as_view()),
+    path('driver-upgrade/', DriverUpgradeView.as_view(), name='driver-upgrade'),
+    path('profile/', ProfileView.as_view(), name='profile'),
+    path('logout/', LogoutView.as_view(), name='logout'),
 ]

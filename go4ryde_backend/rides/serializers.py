@@ -1,45 +1,95 @@
 from rest_framework import serializers
-from .models import Ride, Review
-from accounts.serializers import DriverProfileSerializer
-from .forms import CreateRideForm
+from django.utils.timezone import now
+from .models import Ride
+from bookings.serializers import BookingMiniSerializer
 
 
 class RideSerializer(serializers.ModelSerializer):
-    driver = DriverProfileSerializer(read_only=True)
+
+    seats_remaining = serializers.SerializerMethodField()
+    bookings = BookingMiniSerializer(many=True, read_only=True)
 
     class Meta:
         model = Ride
-        fields = [
-            'id', 'driver', 'ride_type', 'source_name', 'destination_name',
-            'source_lat', 'source_lng', 'dest_lat', 'dest_lng',
-            'stops', 'route_polyline',
-            'departure_time', 'available_seats', 'total_seats',
-            'women_only', 'price_per_seat', 'is_active',
-            'created_at', 'updated_at',
+        fields = "__all__"
+        read_only_fields = [
+            "driver",
+            "distance_km",
+            "duration_min",
+            "route_geometry",
+            "seats_booked",
+            "status",
         ]
-        read_only_fields = ['id', 'driver', 'is_active', 'created_at', 'updated_at']
 
+    # -------------------------
+    # ✅ EXTRA FIELD
+    # -------------------------
+    def get_seats_remaining(self, obj):
+        return obj.seats_remaining()
+
+    # -------------------------
+    # 🔥 VALIDATION (MERGED CLEAN)
+    # -------------------------
     def validate(self, data):
-        # Use CreateRideForm for complex validation
-        # We need to pass the driver_profile context
-        request = self.context.get('request')
-        driver_profile = None
-        if request and hasattr(request.user, 'driver_profile'):
-            driver_profile = request.user.driver_profile
 
-        # Create a form instance with the data
-        # Note: ModelForm needs 'driver' but it's not in 'data' yet (it's in perform_create)
-        # So we pass it as driver_profile to the form's __init__
-        form = CreateRideForm(data=data, driver_profile=driver_profile)
-        if not form.is_valid():
-            raise serializers.ValidationError(form.errors)
+        source = (data.get("source") or "").strip()
+        destination = (data.get("destination") or "").strip()
+
+        source_lat = data.get("source_lat")
+        source_lng = data.get("source_lng")
+        destination_lat = data.get("destination_lat")
+        destination_lng = data.get("destination_lng")
+
+        # ❌ Required fields
+        if not source:
+            raise serializers.ValidationError({"source": "Source is required"})
+
+        if not destination:
+            raise serializers.ValidationError({"destination": "Destination is required"})
+
+        # ❌ Same location
+        if source.lower() == destination.lower():
+            raise serializers.ValidationError({
+                "destination": "Source and destination cannot be the same"
+            })
+
+        # ❌ Coordinates required
+        if not all([source_lat, source_lng, destination_lat, destination_lng]):
+            raise serializers.ValidationError({
+                "location": "Select location from suggestions (lat/lng required)"
+            })
+
+        # ❌ Future date
+        if data.get("date_time") and data["date_time"] <= now():
+            raise serializers.ValidationError({
+                "date_time": "Ride must be scheduled in the future"
+            })
+
+        # ❌ Seats validation
+        seats = data.get("seats_available")
+        if seats is None or int(seats) <= 0:
+            raise serializers.ValidationError({
+                "seats_available": "Seats must be greater than 0"
+            })
+
+        # ❌ Price validation
+        price = data.get("price_per_seat")
+        if price is not None:
+            try:
+                price = float(price)
+                if price <= 0:
+                    raise serializers.ValidationError({
+                        "price_per_seat": "Price must be positive"
+                    })
+            except:
+                raise serializers.ValidationError({
+                    "price_per_seat": "Invalid price format"
+                })
+
         return data
 
-
-class ReviewSerializer(serializers.ModelSerializer):
-    reviewer_name = serializers.CharField(source='reviewer.name', read_only=True)
-
-    class Meta:
-        model = Review
-        fields = ['id', 'ride', 'reviewer_name', 'rating', 'comment', 'created_at']
-        read_only_fields = ['id', 'reviewer_name', 'created_at']
+    # -------------------------
+    # 🚀 CREATE
+    # -------------------------
+    def create(self, validated_data):
+        return super().create(validated_data)

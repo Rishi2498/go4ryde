@@ -1,111 +1,167 @@
-import random
-from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework import status
+from .models import *
+from .serializers import *
+from django.core.mail import send_mail
+from django.conf import settings
+import random
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User, OTPVerification, DriverProfile
-from .serializers import (
-    SendOTPSerializer, VerifyOTPSerializer, UserSerializer,
-    DriverProfileSerializer,
-)
+from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 
-
-def generate_otp():
-    return str(random.randint(100000, 999999))
-
-
+# ---------------- SEND OTP ----------------
 class SendOTPView(APIView):
+    permission_classes = [AllowAny] 
+    authentication_classes = []            # ✅ VERY IMPORTANT (disable JWT here)
+
     def post(self, request):
-        serializer = SendOTPSerializer(data=request.data)
-        if serializer.is_valid():
-            email = serializer.validated_data['email']
-            phone_number = serializer.validated_data.get('phone_number')
-            name = serializer.validated_data.get('name')
+        email = request.data.get('email')
 
-            try:
-                user = User.objects.get(email=email)
-            except User.DoesNotExist:
-                if not phone_number or not name:
-                    return Response(
-                        {'error': 'Phone number and Name are required for registration.'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                user = User.objects.create_user(email=email, phone_number=phone_number, name=name)
+        otp_code = str(random.randint(100000, 999999))
 
-            otp = generate_otp()
-            OTPVerification.objects.filter(user=user).delete()
-            OTPVerification.objects.create(user=user, otp=otp)
+        OTP.objects.create(email=email, otp=otp_code)
 
-            # Mocking email/SMS sending
-            print(f"OTP for {email}: {otp}")
+        send_mail(
+            "Your OTP Code",
+            f"Your OTP is {otp_code}",
+            settings.EMAIL_HOST_USER,
+            [email],
+        )
 
-            return Response({'message': 'OTP sent successfully'}, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "OTP sent"})
 
 
-class VerifyOTPView(APIView):
+# ---------------- VERIFY + REGISTER ----------------
+class RegisterView(APIView):
+    permission_classes = [AllowAny] 
+    authentication_classes = []            # ✅ VERY IMPORTANT (disable JWT here)
+
     def post(self, request):
-        serializer = VerifyOTPSerializer(data=request.data)
-        if serializer.is_valid():
-            email = serializer.validated_data['email']
-            otp_input = serializer.validated_data['otp']
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-            try:
-                user = User.objects.get(email=email)
-                otp_record = OTPVerification.objects.filter(user=user).latest('created_at')
-            except (User.DoesNotExist, OTPVerification.DoesNotExist):
-                return Response({'error': 'Invalid request or expired OTP'}, status=status.HTTP_400_BAD_REQUEST)
+        email = serializer.validated_data['email']
+        phone = serializer.validated_data['phone']
+        otp_input = serializer.validated_data['otp']
 
-            if not otp_record.is_valid():
-                return Response({'error': 'OTP expired or max attempts reached'}, status=status.HTTP_400_BAD_REQUEST)
+        otp_obj = OTP.objects.filter(email=email).last()
 
-            if otp_record.otp == otp_input:
-                otp_record.delete()
-                refresh = RefreshToken.for_user(user)
-                return Response({
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
-                    'user': UserSerializer(user).data,
-                }, status=status.HTTP_200_OK)
-            else:
-                otp_record.attempts += 1
-                otp_record.save()
-                return Response({'error': 'Invalid OTP'}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if not otp_obj:
+            return Response({"error": "OTP not found"}, status=400)
+
+        if otp_obj.is_expired():
+            return Response({"error": "OTP expired"}, status=400)
+
+        if otp_obj.attempts >= 3:
+            return Response({"error": "Max attempts reached"}, status=400)
+
+        if otp_obj.otp != otp_input:
+            otp_obj.attempts += 1
+            otp_obj.save()
+            return Response({"error": "Invalid OTP"}, status=400)
+
+        user = User.objects.create(email=email, phone=phone)
+
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "role": user.role
+        })
 
 
-class UserProfileView(generics.RetrieveUpdateAPIView):
-    """Get or update current user profile."""
-    serializer_class = UserSerializer
+# ---------------- LOGIN ----------------
+class LoginView(APIView):
+    permission_classes = [AllowAny] 
+    authentication_classes = []            # ✅ VERY IMPORTANT (disable JWT here)
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email']
+        otp_input = serializer.validated_data['otp']
+
+        try:
+            user = User.objects.get(email=email)
+        except:
+            return Response({"error": "User not found"}, status=404)
+
+        otp_obj = OTP.objects.filter(email=email).last()
+
+        if otp_obj.is_expired():
+            return Response({"error": "OTP expired"}, status=400)
+
+        if otp_obj.otp != otp_input:
+            return Response({"error": "Invalid OTP"}, status=400)
+
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "role": user.role
+        })
+
+
+# ---------------- DRIVER UPGRADE ----------------
+
+# ---------------- PROFILE VIEW ----------------
+class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get_object(self):
-        return self.request.user
+    def get(self, request):
+        user = request.user
+
+        # DRIVER
+        if user.role == 'DRIVER':
+            try:
+                driver = DriverProfile.objects.get(user=user)
+                serializer = DriverProfileViewSerializer(driver)
+                return Response(serializer.data)
+            except DriverProfile.DoesNotExist:
+                return Response({"error": "Driver profile not found"}, status=404)
+
+        # PASSENGER
+        serializer = PassengerProfileSerializer(user)
+        return Response(serializer.data)
 
 
-class DriverProfileCreateView(generics.CreateAPIView):
-    """Register as a driver (upload DL, RC, vehicle info)."""
-    serializer_class = DriverProfileSerializer
+# ---------------- DRIVER UPGRADE ----------------
+class DriverUpgradeView(APIView):
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
 
-    def perform_create(self, serializer):
-        user = self.request.user
-        if hasattr(user, 'driver_profile'):
-            from rest_framework import serializers as ser
-            raise ser.ValidationError("Driver profile already exists.")
-        user.role = 'driver'
-        user.save()
+    def post(self, request):
+        user = request.user
+
+        driver_profile, created = DriverProfile.objects.get_or_create(user=user)
+
+        serializer = DriverProfileViewSerializer(
+            driver_profile,
+            data=request.data,
+            partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+
         serializer.save(user=user)
 
+        user.role = 'DRIVER'
+        user.save()
 
-class DriverProfileDetailView(generics.RetrieveUpdateAPIView):
-    """View/update own driver profile."""
-    serializer_class = DriverProfileSerializer
-    permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+        return Response({
+            "message": "Driver profile updated" if not created else "Upgraded to driver"
+        }, status=status.HTTP_200_OK)
 
-    def get_object(self):
-        return self.request.user.driver_profile
+# ---------------- LOGOUT ----------------
+class LogoutView(APIView):
+    def post(self, request):
+        try:
+            refresh_token = request.data["refresh"]
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+
+            return Response({"message": "Logged out"})
+        except Exception:
+            return Response({"error": "Invalid token"}, status=400)

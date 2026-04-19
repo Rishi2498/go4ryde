@@ -1,9 +1,10 @@
 from django.urls import path
-from .views import CreateBookingView, UserBookingsView, BookingDetailView, CancelBookingView
+from .views import *
 
 urlpatterns = [
-    path('bookings/create/', CreateBookingView.as_view(), name='create-booking'),
-    path('bookings/my-bookings/', UserBookingsView.as_view(), name='user-bookings'),
-    path('bookings/<int:pk>/', BookingDetailView.as_view(), name='booking-detail'),
-    path('bookings/<int:pk>/cancel/', CancelBookingView.as_view(), name='cancel-booking'),
+    path("create/", CreateBookingView.as_view()),
+    path("my-bookings/", my_bookings),                     # GET
+    path("cancel/<int:booking_id>/", cancel_booking),      # POST
+    path("accept/<int:booking_id>/", accept_booking),
+path("start/<int:booking_id>/", start_ride),
 ]

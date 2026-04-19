@@ -1,83 +1,120 @@
 import razorpay
-from rest_framework import generics, status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
-from .models import Payment, Wallet, WalletTransaction
-from bookings.models import Booking
+from django.shortcuts import redirect
+from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework import status
+from .models import *
+from .serializers import *
 
-from bookings.forms import PaymentForm
 
-razorpay_client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+# -------------------------
+# 🚀 CREATE PAYMENT
+# -------------------------
+@api_view(["POST"])
+def create_payment(request):
 
-class CreateRazorpayOrderView(APIView):
-    permission_classes = [IsAuthenticated]
+    serializer = CreatePaymentSerializer(data=request.data, context={"request": request})
 
-    def post(self, request):
-        form = PaymentForm(data=request.data, user=request.user)
-        if not form.is_valid():
-            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        booking = form._booking
-        amount_in_paise = int(booking.total_price * 100)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
 
-        amount_in_paise = int(booking.total_price * 100)
-        
+    booking = serializer.validated_data["booking"]
+
+    client = razorpay.Client(
+        auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+    )
+
+    amount = int(booking.final_amount * 100)  # INR → paise
+
+    try:
+        order = client.order.create({
+            "amount": amount,
+            "currency": "INR",
+            "payment_capture": 1
+        })
+
+        payment = Payment.objects.create(
+            booking=booking,
+            razorpay_order_id=order["id"],
+            amount=booking.final_amount,
+            status="CREATED"
+        )
+
+        return Response({
+            "order_id": order["id"],
+            "amount": amount,
+            "key": settings.RAZORPAY_KEY_ID
+        })
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+# -------------------------
+# 🚀 VERIFY PAYMENT
+# -------------------------
+@api_view(["GET", "POST"])
+@permission_classes([AllowAny])
+def verify_payment(request):
+
+    # ✅ HANDLE BOTH GET + POST
+    data = request.query_params if request.method == "GET" else request.data
+
+    order_id = data.get("order_id")
+    payment_id = data.get("payment_id")
+    signature = data.get("signature")
+
+    # 🔥 DEBUG (VERY IMPORTANT)
+    print("METHOD:", request.method)
+    print("ORDER ID:", order_id)
+    print("PAYMENT ID:", payment_id)
+    print("SIGNATURE:", signature)
+
+    # ❌ Missing data
+    if not all([order_id, payment_id, signature]):
+        print("❌ Missing payment data")
+        return redirect("/payment/failed")
+
+    client = razorpay.Client(
+        auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+    )
+
+    try:
+        # 🔐 VERIFY SIGNATURE
+        client.utility.verify_payment_signature({
+            "razorpay_order_id": order_id,
+            "razorpay_payment_id": payment_id,
+            "razorpay_signature": signature
+        })
+
+        payment = Payment.objects.get(razorpay_order_id=order_id)
+
+        # ✅ UPDATE PAYMENT
+        payment.razorpay_payment_id = payment_id
+        payment.razorpay_signature = signature
+        payment.status = "SUCCESS"
+        payment.save()
+
+        # ✅ UPDATE BOOKING
+        booking = payment.booking
+        booking.status = "ACCEPTED"
+        booking.payment_status = "PAID"
+        booking.save()
+
+        print("✅ PAYMENT VERIFIED SUCCESS")
+
+        return redirect("/payment/success")
+
+    except Exception as e:
+        print("❌ VERIFY ERROR:", str(e))
+
         try:
-            razorpay_order = razorpay_client.order.create({
-                "amount": amount_in_paise,
-                "currency": "INR",
-                "payment_capture": "1"
-            })
-            
-            payment = Payment.objects.create(
-                booking=booking,
-                razorpay_order_id=razorpay_order['id'],
-                amount=booking.total_price
-            )
-            
-            return Response({
-                'order_id': razorpay_order['id'],
-                'amount': amount_in_paise,
-                'currency': "INR"
-            }, status=status.HTTP_201_CREATED)
-            
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-class VerifyPaymentView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        razorpay_payment_id = request.data.get('razorpay_payment_id')
-        razorpay_order_id = request.data.get('razorpay_order_id')
-        razorpay_signature = request.data.get('razorpay_signature')
-        
-        try:
-            payment = Payment.objects.get(razorpay_order_id=razorpay_order_id)
-        except Payment.DoesNotExist:
-            return Response({'error': 'Payment record not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-        try:
-            razorpay_client.utility.verify_payment_signature({
-                'razorpay_order_id': razorpay_order_id,
-                'razorpay_payment_id': razorpay_payment_id,
-                'razorpay_signature': razorpay_signature
-            })
-            
-            payment.razorpay_payment_id = razorpay_payment_id
-            payment.razorpay_signature = razorpay_signature
-            payment.status = 'success'
+            payment = Payment.objects.get(razorpay_order_id=order_id)
+            payment.status = "FAILED"
             payment.save()
+        except:
+            pass
 
-            # Confirm booking
-            booking = payment.booking
-            booking.status = 'confirmed'
-            booking.save()
-
-            return Response({'message': 'Payment successful and booking confirmed.'}, status=status.HTTP_200_OK)
-        except razorpay.errors.SignatureVerificationError:
-            payment.status = 'failed'
-            payment.save()
-            return Response({'error': 'Payment verification failed.'}, status=status.HTTP_400_BAD_REQUEST)
+        return redirect("/payment/failed")
