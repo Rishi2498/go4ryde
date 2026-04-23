@@ -1,16 +1,23 @@
-from rest_framework.views import APIView
+from rest_framework.views import APIView 
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
-from rest_framework.decorators import api_view,permission_classes
+from rest_framework.decorators import api_view, permission_classes
 
-from .models import *
-from .serializers import *
+from bookings.models import Booking
+from bookings.serializers import CreateBookingSerializer
 
-from coupons.models import *
-from coupons.utils import *
+from coupons.models import Coupon
+from coupons.utils import validate_coupon, apply_coupon_discount
 
 from rides.models import Ride
+from chat.models import ChatRoom  # ✅ NEW
+
+
+# 🔥 HELPER FUNCTION (IMPORTANT)
+def add_user_to_chat(ride, user):
+    room, _ = ChatRoom.objects.get_or_create(ride=ride)
+    room.participants.add(user)
 
 
 class CreateBookingView(APIView):
@@ -32,16 +39,15 @@ class CreateBookingView(APIView):
         # 🔥 LOCK RIDE (IMPORTANT)
         ride = Ride.objects.select_for_update().get(id=ride.id)
 
-        # ❌ Check again (race condition safety)
         if not ride.can_book(seats):
             return Response({"error": "Seats no longer available"}, status=400)
 
-        # 💰 PRICE CALCULATION
+        # 💰 PRICE
         original_amount = ride.price_per_seat * seats
         final_amount = original_amount
         coupon_obj = None
 
-        # 🔥 COUPON
+        # 🎟 COUPON
         coupon_code = data.get("coupon_code")
 
         if coupon_code:
@@ -59,7 +65,7 @@ class CreateBookingView(APIView):
             except Coupon.DoesNotExist:
                 return Response({"error": "Invalid coupon"}, status=400)
 
-        # 🔥 BOOK SEATS
+        # 🔥 BOOK SEAT
         ride.book_seat(seats)
 
         # ✅ CREATE BOOKING
@@ -74,12 +80,13 @@ class CreateBookingView(APIView):
         )
 
         return Response({
-            "message": "Booking confirmed 🚀",
+            "message": "Booking created 🚀",
             "booking_id": booking.id,
             "final_amount": final_amount
         })
 
 
+# ✅ USER BOOKINGS
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_bookings(request):
@@ -90,22 +97,20 @@ def my_bookings(request):
 
     data = [{
         "id": b.id,
-
-        # 🔥 IMPORTANT FIX
         "ride": str(b.ride),
-        "ride_id": b.ride.id,   # ✅ REQUIRED
-
+        "ride_id": b.ride.id,
         "amount": b.final_amount,
         "status": b.status,
         "payment_status": b.payment_status,
-
-        # 🔥 EXTRA (OPTIONAL BUT GOOD)
         "ride_status": b.ride.status
     } for b in bookings]
 
     return Response(data)
 
+
+# ❌ CANCEL
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def cancel_booking(request, booking_id):
 
     booking = Booking.objects.get(id=booking_id, user=request.user)
@@ -118,42 +123,47 @@ def cancel_booking(request, booking_id):
 
     return Response({"message": "Booking cancelled"})
 
+
+# ✅ DRIVER ACCEPTS BOOKING → ADD TO CHAT
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def accept_booking(request, booking_id):
 
-    booking = Booking.objects.get(id=booking_id)
+    booking = Booking.objects.select_related("ride").get(id=booking_id)
 
-    # 🔥 VALIDATION
     if booking.status != "PENDING":
         return Response({"error": "Booking already processed"}, status=400)
 
-    # 🔥 ONLY DRIVER CAN ACCEPT
     if booking.ride.driver != request.user:
         return Response({"error": "Not authorized"}, status=403)
 
+    # ✅ ACCEPT
     booking.status = "ACCEPTED"
     booking.save()
 
+    # 🔥 ADD PASSENGER TO CHAT ROOM
+    add_user_to_chat(booking.ride, booking.user)
+
     return Response({"message": "Booking accepted ✅"})
 
+
+# 🚗 START RIDE
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def start_ride(request, booking_id):
 
     booking = Booking.objects.select_related("ride").get(id=booking_id)
 
-    if booking.status != "ACCEPTED":
-        return Response({"error": "Ride not accepted"}, status=400)
+    if booking.status != "CONFIRMED":
+        return Response({"error": "Ride not confirmed"}, status=400)
 
     if booking.ride.driver != request.user:
         return Response({"error": "Not driver"}, status=403)
 
-    # ✅ UPDATE BOTH
     booking.status = "STARTED"
     booking.save()
 
-    booking.ride.status = "ACTIVE"   # 🔥 CRITICAL
+    booking.ride.status = "ACTIVE"
     booking.ride.save()
 
     return Response({"message": "Ride started 🚗"})

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import DriverLocation, DriverLocationHistory
+from tracking.models import DriverLocation, DriverLocationHistory
 
 
 # 🚗 LIVE DRIVER LOCATION (REAL-TIME)

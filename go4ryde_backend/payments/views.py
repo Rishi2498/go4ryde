@@ -5,8 +5,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
-from .models import *
-from .serializers import *
+from payments.models import Payment
+from payments.serializers import CreatePaymentSerializer, VerifyPaymentSerializer
 
 
 # -------------------------
@@ -74,7 +74,7 @@ def verify_payment(request):
 
     # ❌ Missing data
     if not all([order_id, payment_id, signature]):
-        print("❌ Missing payment data")
+        print("[ERROR] Missing payment data")
         return redirect("/payment/failed")
 
     client = razorpay.Client(
@@ -103,12 +103,12 @@ def verify_payment(request):
         booking.payment_status = "PAID"
         booking.save()
 
-        print("✅ PAYMENT VERIFIED SUCCESS")
+        print("[SUCCESS] PAYMENT VERIFIED SUCCESS")
 
         return redirect("/payment/success")
 
     except Exception as e:
-        print("❌ VERIFY ERROR:", str(e))
+        print("[ERROR] VERIFY ERROR:", str(e))
 
         try:
             payment = Payment.objects.get(razorpay_order_id=order_id)

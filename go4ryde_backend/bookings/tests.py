@@ -1,3 +1,3 @@
-from django.test import TestCase
+from core.models import PlatformFee
 
-# Create your tests here.
+PlatformFee.objects.get_or_create(percentage=10)

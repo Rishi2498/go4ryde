@@ -166,6 +166,7 @@ CORS_ALLOW_ALL_ORIGINS = True  # For dev
 # DRF & JWT Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.SessionAuthentication',   # ✅ ADD THIS
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     "DEFAULT_PERMISSION_CLASSES": (
@@ -189,14 +190,14 @@ CHANNEL_LAYERS = {
 
 ASGI_APPLICATION = "go4ryde_backend.asgi.application"
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
-        },
-    },
-}
+# CHANNEL_LAYERS = {
+#     "default": {
+#         "BACKEND": "channels_redis.core.RedisChannelLayer",
+#         "CONFIG": {
+#             "hosts": [("127.0.0.1", 6379)],
+#         },
+#     },
+# }
 
 # API Keys
 RAZORPAY_KEY_ID = 'rzp_test_SV8GuVVRipG8sE'
@@ -211,3 +212,5 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'dattarishikesh2498@gmail.com'
 EMAIL_HOST_PASSWORD = 'oohv peol mpwr dcau'
 DEFAULT_FROM_EMAIL = 'dattarishikesh2498@gmail.com'
+
+PLATFORM_FEE_PERCENT = 10  # 🔥 dynamic margin

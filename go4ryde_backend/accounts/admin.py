@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User, OTP, Profile, DriverProfile
+from accounts.models import User, OTP, Profile, DriverProfile
 from django.utils.html import format_html
 
 

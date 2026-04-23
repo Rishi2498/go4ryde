@@ -10,10 +10,10 @@ urlpatterns = [
     path('api/accounts/', include('accounts.urls')),
     path('api/rides/', include('rides.urls')),
     path('api/bookings/', include('bookings.urls')),
-    path('api/payments/', include('payments.urls')),
-    path('api/coupon/', include('coupons.urls')),
-    path('api/chat/', include('chat.urls')),
-    path('api/tracking/', include('tracking.urls')),
+    path("api/payments/", include(("payments.urls", "payments"), namespace="payments")),
+    path("api/coupons/", include(("coupons.urls", "coupons"), namespace="coupons")),
+    path("api/chat/", include(("chat.urls", "chat"), namespace="chat")),
+    path("api/tracking/", include(("tracking.urls", "tracking"), namespace="tracking")),
     path('api/core/', include('core.urls')),
 
 ]

@@ -1,13 +1,24 @@
 from rest_framework import serializers
 from django.utils.timezone import now
-from .models import Ride
+from decimal import Decimal, ROUND_HALF_UP
+from rides.models import Ride
 from bookings.serializers import BookingMiniSerializer
+from core.utils import get_platform_fee
+
+# 🔥 NEW IMPORT
+try:
+    from core.models import PlatformFee
+except:
+    PlatformFee = None
 
 
 class RideSerializer(serializers.ModelSerializer):
 
     seats_remaining = serializers.SerializerMethodField()
     bookings = BookingMiniSerializer(many=True, read_only=True)
+
+    # 🔥 NEW FIELD (IMPORTANT)
+    final_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Ride
@@ -22,13 +33,27 @@ class RideSerializer(serializers.ModelSerializer):
         ]
 
     # -------------------------
-    # ✅ EXTRA FIELD
+    # ✅ SEATS REMAINING
     # -------------------------
     def get_seats_remaining(self, obj):
         return obj.seats_remaining()
 
     # -------------------------
-    # 🔥 VALIDATION (MERGED CLEAN)
+    # 🔥 FINAL PRICE (ADMIN %)
+    # -------------------------
+    def get_final_price(self, obj):
+        try:
+            fee = PlatformFee.objects.first() if PlatformFee else None
+            percent = fee.percentage if fee else 0
+        except:
+            percent = 0
+
+        final = obj.price_per_seat * Decimal(1 + percent / 100)
+
+        return round(final, 2)
+
+    # -------------------------
+    # 🔥 VALIDATION
     # -------------------------
     def validate(self, data):
 
@@ -72,7 +97,7 @@ class RideSerializer(serializers.ModelSerializer):
                 "seats_available": "Seats must be greater than 0"
             })
 
-        # ❌ Price validation
+        # ❌ Price validation (DRIVER PRICE ONLY)
         price = data.get("price_per_seat")
         if price is not None:
             try:
@@ -92,4 +117,16 @@ class RideSerializer(serializers.ModelSerializer):
     # 🚀 CREATE
     # -------------------------
     def create(self, validated_data):
+        base_price = validated_data.get("price_per_seat")
+
+        if base_price:
+            base_price = Decimal(base_price)
+            fee = Decimal(get_platform_fee())
+
+            final_price = base_price * (Decimal(1) + fee / Decimal(100))
+
+            validated_data["price_per_seat"] = final_price.quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+
         return super().create(validated_data)

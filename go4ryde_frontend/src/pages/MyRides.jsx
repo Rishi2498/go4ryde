@@ -16,36 +16,50 @@ export default function MyRides() {
 
     useEffect(() => {
         fetchRides();
-
-        return () => stopTracking(); // cleanup
+        return () => stopTracking();
     }, []);
 
+    // ================================
+    // 🚀 FETCH RIDES
+    // ================================
     const fetchRides = async () => {
         try {
             setLoading(true);
+
             const res = await getMyRides();
-            setRides(Array.isArray(res.data) ? res.data : []);
+
+            // ✅ HANDLE BOTH CASES
+            const data = res?.data || res;
+            setRides(Array.isArray(data) ? data : []);
+
+            console.log("🚗 My Rides:", data);
+
         } catch (err) {
-            console.error(err);
+            console.error("❌ Fetch rides error:", err);
         } finally {
             setLoading(false);
         }
     };
 
+    // ================================
+    // ✅ ACCEPT BOOKING
+    // ================================
     const acceptBooking = async (bookingId) => {
         try {
             await api.post(`/bookings/accept/${bookingId}/`);
             alert("Booking Accepted ✅");
             fetchRides();
         } catch (err) {
-            alert("Error accepting");
+            alert("Error accepting booking");
         }
     };
 
-    // 🚗 START TRACKING (WEBSOCKET + GPS)
+    // ================================
+    // 🚗 START TRACKING
+    // ================================
     const startTracking = (rideId) => {
 
-        stopTracking(); // 🔥 prevent duplicates
+        stopTracking(); // prevent duplicate
 
         socketRef.current = new WebSocket(
             `ws://127.0.0.1:8000/ws/tracking/${rideId}/`
@@ -69,7 +83,7 @@ export default function MyRides() {
 
             const now = Date.now();
 
-            if (now - lastSent > 1000) { // throttle
+            if (now - lastSent > 1000) {
                 const coords = {
                     lat: pos.coords.latitude,
                     lng: pos.coords.longitude
@@ -87,7 +101,9 @@ export default function MyRides() {
         });
     };
 
+    // ================================
     // 🛑 STOP TRACKING
+    // ================================
     const stopTracking = () => {
 
         if (socketRef.current) {
@@ -103,10 +119,13 @@ export default function MyRides() {
         console.log("🛑 Tracking stopped");
     };
 
+    // ================================
     // 🚗 START RIDE
+    // ================================
     const startRide = async (bookingId, rideId) => {
         try {
             await api.post(`/bookings/start/${bookingId}/`);
+
             alert("Ride Started 🚗");
 
             startTracking(rideId);
@@ -118,11 +137,18 @@ export default function MyRides() {
         }
     };
 
+    // ================================
+    // 🎨 UI
+    // ================================
     return (
         <div style={{ maxWidth: "900px", margin: "auto", padding: "20px" }}>
             <h2>🚗 My Rides (Driver)</h2>
 
             {loading && <p>Loading...</p>}
+
+            {!loading && rides.length === 0 && (
+                <p>No rides found</p>
+            )}
 
             {rides.map((ride) => {
 
@@ -138,51 +164,34 @@ export default function MyRides() {
                         <h3>{ride.source} → {ride.destination}</h3>
                         <p>📌 Ride Status: {rideStatus}</p>
 
-                        {/* 🔥 DRIVER CONTROLS */}
+                        {/* 🚗 ACTIVE RIDE CONTROLS */}
                         {["STARTED", "ACTIVE"].includes(rideStatus) && (
                             <div style={{ marginBottom: "10px" }}>
 
                                 <button
                                     onClick={() => navigate(`/tracking/${ride.id}`)}
-                                    style={{
-                                        background: "#2563eb",
-                                        color: "white",
-                                        padding: "6px 10px",
-                                        borderRadius: "5px",
-                                        marginRight: "10px"
-                                    }}
+                                    style={btnBlue}
                                 >
                                     🚗 View Live Ride
                                 </button>
 
                                 <button
                                     onClick={() => navigate(`/chat/${ride.id}`)}
-                                    style={{
-                                        background: "green",
-                                        color: "white",
-                                        padding: "6px 10px",
-                                        borderRadius: "5px",
-                                        marginRight: "10px"
-                                    }}
+                                    style={btnGreen}
                                 >
                                     💬 Chat
                                 </button>
 
                                 <button
                                     onClick={stopTracking}
-                                    style={{
-                                        background: "red",
-                                        color: "white",
-                                        padding: "6px 10px",
-                                        borderRadius: "5px"
-                                    }}
+                                    style={btnRed}
                                 >
                                     🛑 Stop Tracking
                                 </button>
                             </div>
                         )}
 
-                        {/* 🔥 BOOKINGS */}
+                        {/* 👥 BOOKINGS */}
                         {ride.bookings?.map((b) => {
 
                             const status = (b.status || "").toUpperCase();
@@ -192,17 +201,26 @@ export default function MyRides() {
                                     <p>👤 {b.user_email}</p>
                                     <p>Status: {status}</p>
 
+                                    {/* 🔥 ACCEPT */}
                                     {status === "PENDING" && (
-                                        <button onClick={() => acceptBooking(b.id)}>
+                                        <button
+                                            onClick={() => acceptBooking(b.id)}
+                                            style={btnBlue}
+                                        >
                                             Accept
                                         </button>
                                     )}
 
-                                    {status === "ACCEPTED" && (
-                                        <button onClick={() => startRide(b.id, ride.id)}>
-                                            Start Ride 🚗
+                                    {/* 🔥 START RIDE (FIXED) */}
+                                    {status === "CONFIRMED" && (
+                                        <button
+                                            onClick={() => startRide(b.id, ride.id)}
+                                            style={btnGreen}
+                                        >
+                                            🚗 Start Ride
                                         </button>
                                     )}
+
                                 </div>
                             );
                         })}
@@ -212,3 +230,35 @@ export default function MyRides() {
         </div>
     );
 }
+
+// ================================
+// 🎨 BUTTON STYLES
+// ================================
+const btnBlue = {
+    background: "#2563eb",
+    color: "white",
+    padding: "6px 10px",
+    borderRadius: "5px",
+    marginRight: "10px",
+    border: "none",
+    cursor: "pointer"
+};
+
+const btnGreen = {
+    background: "#16a34a",
+    color: "white",
+    padding: "6px 10px",
+    borderRadius: "5px",
+    marginRight: "10px",
+    border: "none",
+    cursor: "pointer"
+};
+
+const btnRed = {
+    background: "red",
+    color: "white",
+    padding: "6px 10px",
+    borderRadius: "5px",
+    border: "none",
+    cursor: "pointer"
+};

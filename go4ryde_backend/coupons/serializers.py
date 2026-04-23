@@ -1,46 +1,32 @@
 from rest_framework import serializers
-from .models import Coupon
-
+from coupons.models import Coupon
 
 class ApplyCouponSerializer(serializers.Serializer):
 
-    code = serializers.CharField(max_length=20)
+    coupon_code = serializers.CharField()
     amount = serializers.DecimalField(max_digits=10, decimal_places=2)
 
-    # 🔥 OUTPUT FIELDS (IMPORTANT)
-    final_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    discount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-
-    # -------------------------
-    # 🔍 VALIDATE COUPON
-    # -------------------------
     def validate(self, data):
 
-        code = data.get("code").upper().strip()
-        amount = data.get("amount")
-        user = self.context.get("request").user
+        user = self.context["request"].user
 
-        # 🔥 GET COUPON
         try:
-            coupon = Coupon.objects.get(code=code)
+            coupon = Coupon.objects.get(code=data["coupon_code"])
         except Coupon.DoesNotExist:
-            raise serializers.ValidationError({"code": "Invalid coupon code"})
+            raise serializers.ValidationError("Invalid coupon")
 
-        # 🔥 VALIDATE USING MODEL LOGIC
-        is_valid, message = coupon.is_valid(user, amount)
+        valid, msg = coupon.is_valid(user, data["amount"])
 
-        if not is_valid:
-            raise serializers.ValidationError({"coupon": message})
+        if not valid:
+            raise serializers.ValidationError(msg)
 
-        # 🔥 APPLY DISCOUNT
-        final_amount, discount = coupon.apply_discount(amount)
+        final_amount, discount = coupon.apply_discount(data["amount"])
 
-        # 🔥 STORE RESULTS
-        data["coupon"] = coupon
-        data["final_amount"] = final_amount
-        data["discount"] = discount
-
-        return data
+        return {
+            "coupon": coupon,
+            "discount": discount,
+            "final_amount": final_amount
+        }
 
     # -------------------------
     # 🚀 OPTIONAL SAVE METHOD

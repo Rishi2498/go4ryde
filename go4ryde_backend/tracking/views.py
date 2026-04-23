@@ -3,10 +3,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 import random
 from rides.models import Ride
-from .models import DriverLocation, DriverLocationHistory
+from tracking.models import DriverLocation, DriverLocationHistory
+from django.shortcuts import get_object_or_404
 
-
-# 📍 DRIVER SEND LOCATION
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_location(request):
@@ -15,11 +14,11 @@ def update_location(request):
     lat = request.data.get("lat")
     lng = request.data.get("lng")
 
-    # ✅ FIXED VALIDATION (important)
+    # ✅ VALIDATION
     if ride_id is None or lat is None or lng is None:
         return Response({"error": "Missing data"}, status=400)
 
-    # ✅ TYPE CAST (prevents 500 error)
+    # ✅ TYPE CAST
     try:
         ride_id = int(ride_id)
         lat = float(lat)
@@ -27,40 +26,38 @@ def update_location(request):
     except (ValueError, TypeError):
         return Response({"error": "Invalid data format"}, status=400)
 
-    # 🔍 FETCH RIDE
-    try:
-        ride = Ride.objects.get(id=ride_id)
-    except Ride.DoesNotExist:
-        return Response({"error": "Ride not found"}, status=404)
+    # ✅ FETCH RIDE (SAFE)
+    ride = get_object_or_404(Ride, id=ride_id)
 
-    # 🔒 SECURITY CHECK
+    # 🔒 AUTH CHECK
     if ride.driver != request.user:
         return Response({"error": "Not your ride"}, status=403)
 
-    # 🚗 RIDE STATUS CHECK
+    # 🚗 STATUS CHECK
     if ride.status != "ACTIVE":
         return Response({"error": "Ride not started"}, status=400)
 
-    # ✅ UPDATE LIVE LOCATION (FAST ACCESS)
+    # ✅ UPDATE LIVE LOCATION
     DriverLocation.objects.update_or_create(
         ride=ride,
         defaults={
             "lat": lat,
             "lng": lng,
-            "driver": request.user  # 🔥 new field
+            "driver": request.user
         }
     )
-    if random.randint(1, 3) == 1:  # save only ~33%
-    
-    # ✅ SAVE HISTORY (OPTIONAL FREQUENCY CONTROL)
+
+    # ✅ SAVE HISTORY (controlled frequency)
+    if random.randint(1, 3) == 1:
         DriverLocationHistory.objects.create(
             ride=ride,
             driver=request.user,
             lat=lat,
             lng=lng
-    )
+        )
 
-    return Response({"message": "Location updated successfully"})
+    return Response({"message": "Location updated successfully"}, status=200)
+
 
 @api_view(["GET"])
 def get_driver_location(request, ride_id):

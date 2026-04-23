@@ -1,8 +1,10 @@
 from django.urls import path
-from .views import *
+from chat.views import get_chat_messages, mark_messages_read, send_message_api
+
+app_name = "chat"
 
 urlpatterns = [
-    # path("<int:ride_id>/messages/", get_chat_messages),
-    # path("<int:ride_id>/read/", mark_messages_read),
-    # path("<int:ride_id>/send/", send_message_api),  # optional
+    path("<int:ride_id>/messages/", get_chat_messages, name="get_messages"),
+    path("<int:ride_id>/read/", mark_messages_read, name="mark_read"),
+    path("<int:ride_id>/send/", send_message_api, name="send_message"),
 ]

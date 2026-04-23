@@ -7,9 +7,11 @@ from rest_framework.permissions import IsAuthenticated
 import requests
 import logging
 
-from .models import *
-from bookings.models import *
-from .serializers import *
+from rides.models import Ride
+from bookings.models import Booking
+from rides.serializers import RideSerializer
+
+from chat.models import ChatRoom  # ✅ NEW
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +33,74 @@ class RideViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(rides, many=True)
         return Response(serializer.data)
 
-    
+     # 🔥 SEARCH RIDES (ADD THIS)
+    # @action(detail=False, methods=["post"], url_path="search")
+    # def search(self, request):
+
+
+    @action(detail=False, methods=["post"], url_path="search")
+    def search(self, request):
+        """
+        🔥 TEMP: Return ALL rides (no filtering)
+        Scalable later
+        """
+
+        rides = Ride.objects.all().order_by("-created_at")
+
+        data = [
+            {
+                "id": r.id,
+                "source": r.source,
+                "destination": r.destination,
+
+                "source_lat": r.source_lat,
+                "source_lng": r.source_lng,
+                "destination_lat": r.destination_lat,
+                "destination_lng": r.destination_lng,
+
+                "price_per_seat": r.price_per_seat,
+                "distance_km": r.distance_km,
+                "duration_min": r.duration_min,
+
+                "seats_remaining": getattr(r, "available_seats", 0),
+
+                "route_geometry": r.route_geometry,
+                "status": r.status,
+                "date_time": r.date_time,
+            }
+            for r in rides
+        ]
+
+        return Response(data)
+    #     source_lat = request.data.get("source_lat")
+    #     source_lng = request.data.get("source_lng")
+    #     destination_lat = request.data.get("destination_lat")
+    #     destination_lng = request.data.get("destination_lng")
+
+    #     if not source_lat or not source_lng:
+    #         return Response({"error": "Missing source"}, status=400)
+
+    #     # 🚗 BASIC FILTER (you can improve later)
+    #         rides = Ride.objects.all().order_by("-created_at")  # 🔥 NO FILTER
+    #   # 🔥 OPTIONAL: nearest logic (simple)
+    #     # For now just return all active rides
+
+    #     serializer = self.get_serializer(rides, many=True)
+    #     return Response(serializer.data)
     # -------------------------
-    # 🚀 CREATE RIDE
+    # 🚀 CREATE RIDE + CHAT ROOM
     # -------------------------
     @transaction.atomic
     def perform_create(self, serializer):
         ride = serializer.save(driver=self.request.user)
 
+        # ✅ CREATE CHAT ROOM (CRITICAL)
+        room = ChatRoom.objects.create(ride=ride)
+        room.participants.add(ride.driver)
+
+        # -------------------------
+        # 📍 ROUTE CALCULATION
+        # -------------------------
         if not all([
             ride.source_lat,
             ride.source_lng,
@@ -119,25 +181,30 @@ def calculate_route(request):
 
 
 # -------------------------
-# ✅ ACCEPT BOOKING
+# ✅ ACCEPT BOOKING + CHAT ENABLE
 # -------------------------
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def accept_booking(request, booking_id):
 
-    booking = Booking.objects.get(id=booking_id)
+    booking = Booking.objects.select_related("ride").get(id=booking_id)
 
     if booking.ride.driver != request.user:
         return Response({"error": "Not your ride"}, status=403)
 
-    # 🔥 AUTO ACCEPT ONLY IF PAID
+    # 🔥 ONLY IF PAID
     if booking.payment_status != "PAID":
         return Response({"error": "Payment not completed"}, status=400)
 
-    booking.status = "ACCEPTED"
+    # ✅ UPDATE STATUS (IMPORTANT CHANGE)
+    booking.status = "CONFIRMED"
     booking.save()
 
-    return Response({"message": "Booking accepted"})
+    # ✅ ADD PASSENGER TO CHAT ROOM
+    room, _ = ChatRoom.objects.get_or_create(ride=booking.ride)
+    room.participants.add(booking.user)
+
+    return Response({"message": "Booking accepted & chat enabled ✅"})
 
 
 # -------------------------
@@ -147,20 +214,19 @@ def accept_booking(request, booking_id):
 @permission_classes([IsAuthenticated])
 def start_ride(request, booking_id):
 
-    booking = Booking.objects.get(id=booking_id)
+    booking = Booking.objects.select_related("ride").get(id=booking_id)
 
     if booking.ride.driver != request.user:
         return Response({"error": "Not your ride"}, status=403)
 
-    if booking.status != "ACCEPTED":
-        return Response({"error": "Booking must be accepted first"}, status=400)
+    if booking.status != "CONFIRMED":  # ✅ UPDATED
+        return Response({"error": "Booking must be confirmed first"}, status=400)
 
     booking.status = "STARTED"
     booking.save()
 
-    # 🔥 update ride
     ride = booking.ride
     ride.status = "ACTIVE"
     ride.save()
 
-    return Response({"message": "Ride started"})
+    return Response({"message": "Ride started 🚗"})

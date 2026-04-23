@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Ride, DriverLocation
+from rides.models import Ride, DriverLocation
 from bookings.models import Booking
 
 

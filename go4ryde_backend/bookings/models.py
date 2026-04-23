@@ -20,8 +20,8 @@ class Booking(models.Model):
 
     seats = models.PositiveIntegerField(default=1)
 
-    original_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    final_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    original_amount = models.FloatField()
+    final_amount = models.FloatField()
 
     coupon = models.ForeignKey(Coupon, on_delete=models.SET_NULL, null=True, blank=True)
 

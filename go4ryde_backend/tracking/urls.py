@@ -1,12 +1,9 @@
 from django.urls import path
-from .views import update_location, get_driver_location
-from django.urls import re_path
-from .consumers import RideTrackingConsumer
+from tracking.views import update_location, get_driver_location
 
-websocket_urlpatterns = [
-    re_path(r'ws/tracking/(?P<ride_id>\d+)/$', RideTrackingConsumer.as_asgi()),
-]
+app_name = "tracking"
+
 urlpatterns = [
-    path("update-location/", update_location),  # ✅ MUST match frontend
-    path("driver-location/<int:ride_id>/", get_driver_location),  # ✅ FIXED
+    path("update-location/", update_location, name="update_location"),
+    path("driver-location/<int:ride_id>/", get_driver_location, name="get_driver_location"),
 ]
