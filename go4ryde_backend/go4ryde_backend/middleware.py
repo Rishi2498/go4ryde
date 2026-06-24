@@ -7,83 +7,135 @@ from django.contrib.auth.models import AnonymousUser
 from django.db import close_old_connections
 
 from channels.db import database_sync_to_async
+from rest_framework_simplejwt.tokens import AccessToken
 
-# ✅ For SimpleJWT validation
+# ✅ SimpleJWT tools
 from rest_framework_simplejwt.tokens import UntypedToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.backends import TokenBackend
 
 User = get_user_model()
 
 
 # ---------------- USER FETCH ---------------- #
-   
+
 @database_sync_to_async
-def get_user_from_token(token):
+def get_user(user_id):
     try:
-        # ✅ Validate token (important for SimpleJWT)
+        return User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return AnonymousUser()
+
+
+# ---------------- TOKEN VALIDATION ---------------- #
+
+def decode_token(token):
+    """
+    Decode JWT using SimpleJWT backend (correct way)
+    """
+    try:
+        # ✅ Validate token
         UntypedToken(token)
 
-        # ✅ Decode token
-        decoded_data = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=["HS256"]
-        )
+        # ✅ Decode using SimpleJWT backend
+        decoded = TokenBackend(
+            algorithm=settings.SIMPLE_JWT["ALGORITHM"],
+            signing_key=settings.SECRET_KEY
+        ).decode(token, verify=True)
 
-        user_id = decoded_data.get("user_id")
+        return decoded
 
-        user = User.objects.get(id=user_id)
-        return user
-
-    except InvalidToken:
-        print("❌ Invalid JWT token")
-    except TokenError:
-        print("❌ Token error")
-    except jwt.ExpiredSignatureError:
-        print("❌ Token expired")
-    except User.DoesNotExist:
-        print("❌ User not found")
-    except Exception as e:
-        print("❌ Unknown JWT error:", e)
-
-    return AnonymousUser()
+    except (InvalidToken, TokenError):
+        return None
+    except Exception:
+        return None
 
 
 # ---------------- MIDDLEWARE ---------------- #
 
+# class JWTAuthMiddleware:
+
+#     def __init__(self, inner):
+#         self.inner = inner
+
+#     def __call__(self, scope):
+#         return JWTAuthMiddlewareInstance(scope, self.inner)
 class JWTAuthMiddleware:
-    def __init__(self, app):
-        self.app = app
+
+    def __init__(self, inner):
+        self.inner = inner
 
     async def __call__(self, scope, receive, send):
+
+        query_string = scope.get("query_string", b"").decode()
+        query_params = parse_qs(query_string)
+
+        token = query_params.get("token")
+
+        if token:
+            try:
+                access_token = AccessToken(token[0])
+                user = await self.get_user(access_token["user_id"])
+                scope["user"] = user
+                print("✅ USER AUTH:", user)
+            except Exception as e:
+                print("❌ JWT ERROR:", e)
+                scope["user"] = AnonymousUser()
+        else:
+            print("❌ NO TOKEN")
+            scope["user"] = AnonymousUser()
+
+        return await self.inner(scope, receive, send)
+
+    @database_sync_to_async
+    def get_user(self, user_id):
+        try:
+            return User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return AnonymousUser()
+
+class JWTAuthMiddlewareInstance:
+
+    def __init__(self, scope, inner):
+        self.scope = scope
+        self.inner = inner
+
+    async def __call__(self, receive, send):
         close_old_connections()
 
         try:
-            query_string = scope.get("query_string", b"").decode()
+            # 🔥 1. Try QUERY PARAM (?token=...)
+            query_string = self.scope.get("query_string", b"").decode()
             query_params = parse_qs(query_string)
+            token = None
 
-            token_list = query_params.get("token", [])
+            if "token" in query_params:
+                token = query_params["token"][0]
 
-            if token_list:
-                token = token_list[0]
+            # 🔥 2. Try HEADERS (Authorization: Bearer xxx)
+            if not token:
+                headers = dict(self.scope.get("headers", []))
+                auth_header = headers.get(b"authorization")
 
-                print("🔑 WS TOKEN RECEIVED")
+                if auth_header:
+                    auth_header = auth_header.decode()
+                    if auth_header.startswith("Bearer "):
+                        token = auth_header.split(" ")[1]
 
-                user = await get_user_from_token(token)
+            # 🔥 3. Decode + fetch user
+            if token:
+                decoded = decode_token(token)
 
-                if user and not user.is_anonymous:
-                    print("✅ WS AUTH USER:", user)
+                if decoded:
+                    user = await get_user(decoded.get("user_id"))
+                    self.scope["user"] = user if user else AnonymousUser()
                 else:
-                    print("❌ WS AUTH FAILED → Anonymous")
-
-                scope["user"] = user
-
+                    self.scope["user"] = AnonymousUser()
             else:
-                print("⚠️ No token provided in WS")
-                scope["user"] = AnonymousUser()
+                self.scope["user"] = AnonymousUser()
 
         except Exception as e:
-            print("❌ Middleware crash:", e)
-            scope["user"] = AnonymousUser()
+            print("❌ JWT Middleware Error:", str(e))
+            self.scope["user"] = AnonymousUser()
 
-        return await self.app(scope, receive, send)
+        return await self.inner(self.scope, receive, send)

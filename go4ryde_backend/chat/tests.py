@@ -1,147 +1,141 @@
 from rest_framework.test import APITestCase
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.urls import reverse
-from django.utils.timezone import now
-from datetime import timedelta
-from accounts.models import User
-from rides.models import Ride
-from chat.models import ChatRoom, Message
+from chat.models import Message
+from core.factories import UserFactory, RideFactory, ChatRoomFactory
 
 
-class ChatTest(APITestCase):
+class ChatTestCase(APITestCase):
 
     def setUp(self):
-        # Users
-        self.driver = User.objects.create(email="driver@test.com", phone="111", role="DRIVER")
-        self.passenger = User.objects.create(email="user@test.com", phone="222", role="PASSENGER")
-        self.other_user = User.objects.create(email="other@test.com", phone="333", role="PASSENGER")
+        self.driver = UserFactory()
+        self.passenger = UserFactory()
 
-        # Tokens
-        self.driver_token = str(RefreshToken.for_user(self.driver).access_token)
-        self.passenger_token = str(RefreshToken.for_user(self.passenger).access_token)
+        self.ride = RideFactory(driver=self.driver)
 
-        # Ride
-        self.ride = Ride.objects.create(
-            driver=self.driver,
-            source="A",
-            destination="B",
-            source_lat=1,
-            source_lng=1,
-            destination_lat=2,
-            destination_lng=2,
-            seats_available=3,
-            price_per_seat=100,
-            status="ACTIVE",
-            date_time=now() + timedelta(hours=1)   # ✅ ADD THIS
-        )
-
-        # Chat room
-        self.room = ChatRoom.objects.create(ride=self.ride)
+        self.room = ChatRoomFactory(ride=self.ride)
         self.room.participants.add(self.driver, self.passenger)
 
-        # Messages
-        self.message = Message.objects.create(
-            room=self.room,
-            sender=self.passenger,
-            text="Hello driver"
+        self.client.force_authenticate(user=self.passenger)
+
+    # -----------------------------
+    # 🖨️ HELPER: PRINT CHAT STATE
+    # -----------------------------
+    def print_chat(self, label=""):
+        print(f"\n📨 ===== {label} =====")
+        for msg in Message.objects.all():
+            print(f"{msg.sender.email} ➜ {msg.text} | read={msg.is_read}")
+        print("📨 =====================\n")
+
+    # -----------------------------
+    # ✅ SEND MESSAGE
+    # -----------------------------
+    def test_send_message_success(self):
+        response = self.client.post(
+            f"/api/chat/send/{self.ride.id}/",
+            {"message": "Hello driver"}
         )
 
-    # -------------------------
-    # 📥 GET MESSAGES
-    # -------------------------
-    def test_get_chat_messages(self):
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.passenger_token}")
+        print("Response:", response.data)
+        self.print_chat("After Send")
 
-        url = reverse("chat:get_messages", args=[self.ride.id])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Message.objects.count(), 1)
 
-        res = self.client.get(url)
-
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(len(res.data), 1)
-
-    def test_get_messages_not_allowed(self):
-        token = str(RefreshToken.for_user(self.other_user).access_token)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
-
-        url = reverse("chat:get_messages", args=[self.ride.id])
-
-        res = self.client.get(url)
-
-        self.assertEqual(res.status_code, 403)
-
-    # -------------------------
-    # 👁️ MARK READ
-    # -------------------------
-    def test_mark_messages_read(self):
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.driver_token}")
-
-        url = reverse("chat:mark_read", args=[self.ride.id])
-
-        res = self.client.post(url)
-
-        self.message.refresh_from_db()
-
-        self.assertEqual(res.status_code, 200)
-        self.assertTrue(self.message.is_read)
-
-    # -------------------------
-    # 📤 SEND MESSAGE
-    # -------------------------
-    def test_send_message(self):
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.passenger_token}")
-
-        url = reverse("chat:send_message", args=[self.ride.id])
-
-        res = self.client.post(url, {
-            "message": "Hello again"
-        }, format="json")
-
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(Message.objects.count(), 2)
-
+    # -----------------------------
+    # ❌ EMPTY MESSAGE BLOCK
+    # -----------------------------
     def test_send_empty_message(self):
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.passenger_token}")
+        response = self.client.post(
+            f"/api/chat/send/{self.ride.id}/",
+            {"message": ""}
+        )
 
-        url = reverse("chat:send_message", args=[self.ride.id])
+        print("Empty Response:", response.data)
 
-        res = self.client.post(url, {
-            "message": ""
-        }, format="json")
+        self.assertEqual(response.status_code, 400)
 
-        self.assertEqual(res.status_code, 400)
+    # -----------------------------
+    # ❌ SPAM BLOCK
+    # -----------------------------
+    def test_spam_block(self):
+        for i in range(5):
+            self.client.post(
+                f"/api/chat/send/{self.ride.id}/",
+                {"message": "spam"}
+            )
 
-    def test_send_long_message(self):
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.passenger_token}")
+        response = self.client.post(
+            f"/api/chat/send/{self.ride.id}/",
+            {"message": "spam"}
+        )
 
-        url = reverse("chat:send_message", args=[self.ride.id])
+        self.print_chat("Spam Test")
 
-        res = self.client.post(url, {
-            "message": "a" * 600
-        }, format="json")
+        self.assertEqual(response.status_code, 400)
 
-        self.assertEqual(res.status_code, 400)
+    # -----------------------------
+    # ❌ PHONE NUMBER BLOCK
+    # -----------------------------
+    def test_phone_block(self):
+        response = self.client.post(
+            f"/api/chat/send/{self.ride.id}/",
+            {"message": "Call me 9876543210"}
+        )
 
-    def test_send_blocked_message(self):
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.passenger_token}")
+        print("Phone Block:", response.data)
 
-        url = reverse("chat:send_message", args=[self.ride.id])
+        self.assertEqual(response.status_code, 400)
 
-        res = self.client.post(url, {
-            "message": "this is spam"
-        }, format="json")
+    # -----------------------------
+    # ❌ UNAUTHORIZED USER
+    # -----------------------------
+    def test_unauthorized_user(self):
+        stranger = UserFactory()
+        self.client.force_authenticate(user=stranger)
 
-        self.assertEqual(res.status_code, 400)
+        response = self.client.post(
+            f"/api/chat/send/{self.ride.id}/",
+            {"message": "hack"}
+        )
 
-    def test_send_phone_before_start(self):
-        self.ride.status = "PENDING"
-        self.ride.save()
+        print("Unauthorized:", response.data)
 
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.passenger_token}")
+        self.assertEqual(response.status_code, 403)
 
-        url = reverse("chat:send_message", args=[self.ride.id])
+    # -----------------------------
+    # ✅ GET MESSAGES
+    # -----------------------------
+    def test_get_messages(self):
+        Message.objects.create(
+            room=self.room,
+            sender=self.passenger,
+            text="Hi"
+        )
 
-        res = self.client.post(url, {
-            "message": "Call me 9876543210"
-        }, format="json")
+        response = self.client.get(f"/api/chat/{self.ride.id}/")
 
-        self.assertEqual(res.status_code, 400)
+        print("Messages API:", response.data)
+        self.print_chat("Get Messages")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+
+    # -----------------------------
+    # ✅ MARK AS READ
+    # -----------------------------
+    def test_mark_read(self):
+        msg = Message.objects.create(
+            room=self.room,
+            sender=self.driver,
+            text="Hello",
+            is_read=False
+        )
+
+        self.print_chat("Before Read")
+
+        self.client.post(f"/api/chat/read/{self.ride.id}/")
+
+        msg.refresh_from_db()
+
+        self.print_chat("After Read")
+
+        self.assertTrue(msg.is_read)

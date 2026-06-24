@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from bookings.models import Booking
+from payments.models import *
 
 
 # -------------------------
@@ -41,3 +42,32 @@ class VerifyPaymentSerializer(serializers.Serializer):
             raise serializers.ValidationError("Invalid payment data")
 
         return data
+
+class BankAccountSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = BankAccount
+
+        fields = [
+            "account_holder_name",
+            "bank_name",
+            "account_number",
+            "ifsc_code",
+            "upi_id",
+            "is_verified",
+        ]
+
+class WithdrawalSerializer(
+    serializers.ModelSerializer
+):
+
+    class Meta:
+
+        model = Withdrawal
+
+        fields = [
+            "id",
+            "amount",
+            "status",
+            "created_at",
+        ]

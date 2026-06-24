@@ -73,7 +73,6 @@ class OTP(models.Model):
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     image = models.ImageField(upload_to='profiles/', null=True, blank=True)
-
     def __str__(self):
         return self.user.email
 
@@ -81,7 +80,6 @@ class Profile(models.Model):
 # ---------------- DRIVER PROFILE ----------------
 class DriverProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    
     dl_image = models.ImageField(upload_to='dl/')
     rc_image = models.ImageField(upload_to='rc/')
     profile_image = models.ImageField(upload_to='driver_profile/')

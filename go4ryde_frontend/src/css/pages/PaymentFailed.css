@@ -1,0 +1,184 @@
+.payment-failed-page {
+
+    min-height: calc(100vh - 80px);
+
+    padding-top: 110px;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    background: linear-gradient(
+        135deg,
+        #fff5f5,
+        #ffeaea
+    );
+
+    padding-left: 20px;
+    padding-right: 20px;
+}
+
+.payment-failed-card {
+
+    width: 100%;
+    max-width: 650px;
+
+    background: white;
+
+    border-radius: 20px;
+
+    padding: 50px;
+
+    text-align: center;
+
+    box-shadow:
+        0 20px 40px rgba(0,0,0,.08);
+
+    animation: paymentFailedFadeUp .4s ease;
+}
+
+.payment-failed-icon {
+
+    width: 90px;
+    height: 90px;
+
+    margin: 0 auto 25px;
+
+    border-radius: 50%;
+
+    background: #ef4444;
+
+    color: white;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    font-size: 42px;
+
+    font-weight: bold;
+}
+
+.payment-failed-title {
+
+    margin-bottom: 15px;
+
+    color: #111827;
+
+    font-size: 2rem;
+}
+
+.payment-failed-message {
+
+    color: #6b7280;
+
+    font-size: 1rem;
+
+    line-height: 1.7;
+
+    margin-bottom: 35px;
+}
+
+.payment-failed-actions {
+
+    display: flex;
+
+    gap: 15px;
+
+    justify-content: center;
+
+    flex-wrap: wrap;
+}
+
+.payment-failed-primary-btn {
+
+    background: #ef4444;
+
+    color: white;
+
+    border: none;
+
+    padding: 14px 24px;
+
+    border-radius: 10px;
+
+    cursor: pointer;
+
+    font-weight: 600;
+
+    transition: .3s;
+}
+
+.payment-failed-primary-btn:hover {
+
+    transform: translateY(-2px);
+}
+
+.payment-failed-secondary-btn {
+
+    background: white;
+
+    color: #111827;
+
+    border: 1px solid #d1d5db;
+
+    padding: 14px 24px;
+
+    border-radius: 10px;
+
+    cursor: pointer;
+
+    font-weight: 600;
+
+    transition: .3s;
+}
+
+.payment-failed-secondary-btn:hover {
+
+    background: #f3f4f6;
+}
+
+@keyframes paymentFailedFadeUp {
+
+    from {
+
+        opacity: 0;
+
+        transform: translateY(20px);
+    }
+
+    to {
+
+        opacity: 1;
+
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 768px) {
+
+    .payment-failed-card {
+
+        padding: 30px 20px;
+    }
+
+    .payment-failed-title {
+
+        font-size: 1.6rem;
+    }
+
+    .payment-failed-actions {
+
+        flex-direction: column;
+    }
+
+    .payment-failed-primary-btn,
+    .payment-failed-secondary-btn {
+
+        width: 100%;
+    }
+}

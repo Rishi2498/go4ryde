@@ -2,124 +2,141 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
-
 from chat.models import ChatRoom, Message
-from rides.models import Ride
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
 
+    # ---------------------------
+    # 🔌 CONNECT
+    # ---------------------------
     async def connect(self):
-        self.user = self.scope["user"]
-        self.ride_id = self.scope["url_route"]["kwargs"]["ride_id"]
-        self.room_group_name = f"chat_{self.ride_id}"
+        try:
+            self.user = self.scope.get("user")
+            self.ride_id = self.scope["url_route"]["kwargs"]["ride_id"]
+            self.room_group_name = f"chat_{self.ride_id}"
 
-        print("👤 CONNECT USER:", self.user)
+            print("👤 CONNECT USER:", self.user)
 
-        # ❌ Unauthorized
-        if not self.user or isinstance(self.user, AnonymousUser):
-            print("❌ Anonymous user")
+            # ❌ Unauthorized
+            if not self.user or isinstance(self.user, AnonymousUser):
+                print("❌ Anonymous user → closing")
+                await self.close()
+                return
+
+            # ✅ Get room
+            self.room = await self.get_room()
+
+            if not self.room:
+                print("❌ ChatRoom not found")
+                await self.close()
+                return
+
+            # ✅ Permission check
+            if not await self.is_participant():
+                print("❌ Not allowed user")
+                await self.close()
+                return
+
+            # ✅ Join group
+            await self.channel_layer.group_add(
+                self.room_group_name,
+                self.channel_name
+            )
+
+            await self.accept()
+            print("✅ WebSocket Connected")
+
+        except Exception as e:
+            print("❌ CONNECT ERROR:", str(e))
             await self.close()
-            return
 
-        # ✅ Get room
-        self.room = await self.get_room()
-
-        if not self.room:
-            print("❌ ChatRoom not found")
-            await self.close()
-            return
-
-        # ✅ Permission check (NEW LOGIC)
-        is_allowed = await self.is_participant()
-
-        if not is_allowed:
-            print("❌ Not allowed to chat")
-            await self.close()
-            return
-
-        # ✅ Join group
-        await self.channel_layer.group_add(
-            self.room_group_name,
-            self.channel_name
-        )
-
-        await self.accept()
-        print("✅ WebSocket Connected")
-
+    # ---------------------------
+    # 🔌 DISCONNECT
+    # ---------------------------
     async def disconnect(self, close_code):
-        print("❌ WebSocket Disconnected")
+        print("❌ WebSocket Disconnected:", close_code)
 
-        await self.channel_layer.group_discard(
-            self.room_group_name,
-            self.channel_name
-        )
+        try:
+            await self.channel_layer.group_discard(
+                self.room_group_name,
+                self.channel_name
+            )
+        except:
+            pass
 
+    # ---------------------------
+    # 📩 RECEIVE
+    # ---------------------------
     async def receive(self, text_data):
-        data = json.loads(text_data)
+        try:
+            data = json.loads(text_data)
 
-        message = data.get("message")
-        typing = data.get("typing")
-        read = data.get("read")
+            message = data.get("message")
+            typing = data.get("typing")
+            read = data.get("read")
 
-        # ---------------------------
-        # ⌨️ Typing Indicator
-        # ---------------------------
-        if typing is not None:
+            # ---------------------------
+            # ⌨️ Typing Indicator
+            # ---------------------------
+            if typing is not None:
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        "type": "typing_event",
+                        "user": self.user.id,
+                        "typing": typing
+                    }
+                )
+                return
+
+            # ---------------------------
+            # 👁️ Read Receipt
+            # ---------------------------
+            if read:
+                await self.mark_messages_read()
+
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        "type": "read_event",
+                        "user": self.user.id
+                    }
+                )
+                return
+
+            # ---------------------------
+            # 💬 Message Handling
+            # ---------------------------
+            if not message or len(message) > 500:
+                return
+
+            if any(word in message.lower() for word in ["spam", "abuse"]):
+                return
+
+            # ✅ Permission re-check
+            if not await self.is_participant():
+                return
+
+            # ✅ Save message
+            msg_obj = await self.save_message(message)
+
+            # 📤 Broadcast
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
-                    "type": "typing_event",
-                    "user": self.user.id,
-                    "typing": typing
+                    "type": "chat_message",
+                    "id": msg_obj.id,
+                    "message": msg_obj.text,
+                    "sender": self.user.id,
+                    "sender_email": self.user.email,
+                    "timestamp": str(msg_obj.created_at),
+                    "status": "sent"
                 }
             )
-            return
 
-        # ---------------------------
-        # 👁️ Read Receipt
-        # ---------------------------
-        if read:
-            await self.mark_messages_read()
-
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    "type": "read_event",
-                    "user": self.user.id
-                }
-            )
-            return
-
-        # ---------------------------
-        # 💬 Message Handling
-        # ---------------------------
-        if not message or len(message) > 500:
-            return
-
-        if any(word in message.lower() for word in ["spam", "abuse"]):
-            return
-
-        # ✅ Double check permission
-        if not await self.is_participant():
-            return
-
-        # ✅ Save message
-        msg_obj = await self.save_message(message)
-
-        # 📤 Broadcast message
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                "type": "chat_message",
-                "id": msg_obj.id,
-                "message": msg_obj.text,
-                "sender": self.user.id,
-                "sender_email": self.user.email,
-                "timestamp": str(msg_obj.created_at),
-                "status": "sent"  # ✅ WhatsApp style
-            }
-        )
+        except Exception as e:
+            print("❌ RECEIVE ERROR:", str(e))
 
     # ---------------------------
     # 📤 EVENTS
@@ -144,7 +161,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def is_participant(self):
-        return self.room.participants.filter(id=self.user.id).exists()
+        return (
+
+        self.user == self.room.driver
+
+        or
+
+        self.user == self.room.passenger
+    )
 
     @database_sync_to_async
     def save_message(self, message):

@@ -1,9 +1,12 @@
 import api from "../utils/axiosInstance";
 
-// 📩 GET HISTORY
-export const getChatMessages = (rideId) =>
-    api.get(`/chat/${rideId}/messages/`);
+export const getMessages = (bookingId) =>
+    api.get(`/chat/${bookingId}/`);
 
-// ✅ MARK READ
-export const markMessagesRead = (rideId) =>
-    api.post(`/chat/${rideId}/read/`);
+export const sendMessage = (bookingId, message) =>
+    api.post(`/chat/send/${bookingId}/`, {
+        message
+    });
+
+export const markRead = (bookingId) =>
+    api.post(`/chat/read/${bookingId}/`);

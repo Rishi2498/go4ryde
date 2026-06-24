@@ -1,0 +1,268 @@
+/* =========================
+   NAVBAR WRAPPER (FLOATING)
+========================= */
+.navbar {
+    position: fixed;
+    top: 20px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    z-index: 1000;
+}
+
+/* =========================
+   GLASS CONTAINER
+========================= */
+.nav-container {
+    width: 90%;
+    max-width: 1200px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding: 12px 20px;
+
+    border-radius: 16px;
+    color: black;
+
+
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(16px);
+
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+
+    transition: all 0.3s ease;
+}
+
+/* SCROLL EFFECT */
+.navbar.scrolled .nav-container {
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* =========================
+   LOGO
+========================= */
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+}
+
+.logo-icon {
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    color: white;
+
+    padding: 8px;
+    border-radius: 10px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.logo-text {
+    font-size: 18px;
+    font-weight: 700;
+    color: #111;
+}
+
+.logo-text span {
+    color: #3b82f6;
+}
+
+/* =========================
+   NAV LINKS
+========================= */
+.nav-links {
+    display: flex;
+    gap: 30px;
+}
+
+.nav-item {
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 500;
+    color: #555;
+
+    position: relative;
+    transition: all 0.25s ease;
+}
+
+/* hover */
+.nav-item:hover {
+    color: black;
+}
+
+/* ACTIVE */
+.nav-item.active {
+    color: black;
+}
+
+/* underline animation */
+.nav-item::after {
+    content: "";
+    position: absolute;
+    bottom: -6px;
+    left: 0;
+
+    width: 0%;
+    height: 2px;
+    background: #3b82f6;
+
+    transition: width 0.3s ease;
+}
+
+.nav-item:hover::after,
+.nav-item.active::after {
+    width: 100%;
+}
+
+/* =========================
+   RIGHT SIDE
+========================= */
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* SIGN IN BUTTON (PILL STYLE) */
+.signin-btn {
+    padding: 8px 18px;
+    border-radius: 999px;
+
+    background: black;
+    color: white;
+
+    font-size: 14px;
+    font-weight: 500;
+
+    text-decoration: none;
+
+    transition: all 0.25s ease;
+}
+
+.signin-btn:hover {
+    background: #222;
+    transform: translateY(-1px);
+}
+
+/* LOGOUT BUTTON */
+.logout-btn {
+    padding: 8px 16px;
+    border-radius: 999px;
+
+    background: #ef4444;
+    color: white;
+
+    border: none;
+    cursor: pointer;
+
+    transition: all 0.25s ease;
+}
+
+.logout-btn:hover {
+    background: #dc2626;
+}
+
+/* =========================
+   MOBILE ICON
+========================= */
+.mobile-icon {
+    display: none;
+    cursor: pointer;
+}
+
+/* =========================
+   MOBILE MENU (GLASS)
+========================= */
+.mobile-menu {
+    position: absolute;
+    top: 80px;
+
+    width: 90%;
+    left: 5%;
+
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    padding: 16px;
+    box-sizing: border-box;
+
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+
+    animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mobile-menu a,
+.mobile-menu button {
+    text-decoration: none;
+    color: #1e293b;
+    font-weight: 600;
+    font-size: 16px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+}
+
+.mobile-menu a:hover,
+.mobile-menu button:hover {
+    background: rgba(15, 23, 42, 0.05);
+    color: #0f172a;
+    transform: translateX(4px);
+}
+
+.mobile-menu button {
+    color: #ef4444;
+}
+
+.mobile-menu button:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+/* =========================
+   ANIMATION
+========================= */
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-15px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+@media (max-width: 768px) {
+
+    .nav-links,
+    .nav-right {
+        display: none;
+        color: black;
+    }
+
+    .mobile-icon {
+        display: block;
+    }
+}

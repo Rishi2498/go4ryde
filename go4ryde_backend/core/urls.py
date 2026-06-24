@@ -1,3 +1,8 @@
 from django.urls import path
-
-urlpatterns = []
+from core.views import *
+urlpatterns = [
+#     path(
+#     "notifications/",
+#     my_notifications
+# )
+]

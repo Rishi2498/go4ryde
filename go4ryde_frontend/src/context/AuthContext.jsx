@@ -4,16 +4,34 @@ import { getProfile } from '../services/authService'
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
+
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user')
+
+    return savedUser
+      ? JSON.parse(savedUser)
+      : null
+  })
+
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const token = localStorage.getItem('access_token')
+
     if (token) {
       getProfile()
-        .then((res) => setUser(res.data))
+        .then((res) => {
+          setUser(res.data)
+
+          localStorage.setItem(
+            'user',
+            JSON.stringify(res.data)
+          )
+        })
         .catch(() => {
-          localStorage.clear()
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          localStorage.removeItem('user')
           setUser(null)
         })
         .finally(() => setLoading(false))
@@ -23,18 +41,42 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = (tokens, userData) => {
-    localStorage.setItem('access_token', tokens.access)
-    localStorage.setItem('refresh_token', tokens.refresh)
+    localStorage.setItem(
+      'access_token',
+      tokens.access
+    )
+
+    localStorage.setItem(
+      'refresh_token',
+      tokens.refresh
+    )
+
+    localStorage.setItem(
+      'user',
+      JSON.stringify(userData)
+    )
+
     setUser(userData)
   }
 
   const logout = () => {
-    localStorage.clear()
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
+    localStorage.removeItem('user')
+
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, setUser, login, logout, loading }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        setUser,
+        login,
+        logout,
+        loading
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )

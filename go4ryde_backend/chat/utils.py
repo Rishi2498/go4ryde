@@ -1,6 +1,6 @@
 # chat/utils.py
 
-def can_chat(user, ride, booking=None):
+def can_chat(user, ride, booking=None,):
     if not user or not ride:
         return False, "Invalid user or ride"
 
@@ -23,3 +23,11 @@ def can_chat(user, ride, booking=None):
         return False, "Unauthorized"
 
     return True, "Passenger allowed"
+
+def can_access_chat(user, room):
+
+    return (
+        user == room.driver
+        or
+        user == room.passenger
+    )

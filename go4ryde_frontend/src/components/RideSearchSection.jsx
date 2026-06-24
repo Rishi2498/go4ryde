@@ -10,7 +10,7 @@ export default function RideSearchSection() {
         try {
             setLoading(true);
 
-            const token = localStorage.getItem("access");
+            const token = localStorage.getItem("access_token");
 
             const res = await axios.get(
                 "http://localhost:8000/api/rides/",

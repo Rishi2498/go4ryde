@@ -1,9 +1,8 @@
-// src/components/RideSearchForm.jsx
-
 import React from "react";
 import LocationInput from "./LocationInput";
-
 export default function RideSearchForm({
+    source,
+    destination,
     setSource,
     setDestination,
 }) {
@@ -22,28 +21,26 @@ export default function RideSearchForm({
     };
 
     return (
-        <div style={{
-            padding: "15px",
-            background: "#fff",
-            borderRadius: "10px",
-            marginBottom: "10px"
-        }}>
+        <div className="search-box">
+
             {/* FROM */}
             <LocationInput
                 placeholder="From location"
+                value={source}
                 onSelect={setSource}
             />
-
-            {/* CURRENT LOCATION BUTTON */}
-            <button onClick={handleCurrentLocation}>
-                📍 Use Current Location
-            </button>
-
+            {/* 
+            <button className="current-btn" onClick={handleCurrentLocation}>
+                📍
+            </button> */}
+            {/* Use Current Location */}
             {/* TO */}
             <LocationInput
                 placeholder="To location"
+                value={destination}
                 onSelect={setDestination}
             />
+
         </div>
     );
 }

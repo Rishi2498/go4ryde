@@ -30,6 +30,7 @@ class RideSerializer(serializers.ModelSerializer):
             "route_geometry",
             "seats_booked",
             "status",
+            "bookings.phone",
         ]
 
     # -------------------------
@@ -130,3 +131,14 @@ class RideSerializer(serializers.ModelSerializer):
             )
 
         return super().create(validated_data)
+    
+class RideDetailSerializer(serializers.ModelSerializer):
+
+    seats_remaining = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Ride
+        fields = "__all__"
+
+    def get_seats_remaining(self, obj):
+        return obj.seats_remaining()

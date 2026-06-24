@@ -15,6 +15,7 @@ urlpatterns = [
     path("api/chat/", include(("chat.urls", "chat"), namespace="chat")),
     path("api/tracking/", include(("tracking.urls", "tracking"), namespace="tracking")),
     path('api/core/', include('core.urls')),
+    path('api/notifications/', include('notifications.urls')),
 
 ]
 

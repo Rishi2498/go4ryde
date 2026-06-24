@@ -1,103 +1,171 @@
 from rest_framework.test import APITestCase
-from rest_framework_simplejwt.tokens import RefreshToken
 from unittest.mock import patch
-from django.urls import reverse
 
-from accounts.models import User
-from rides.models import Ride
+from core.factories import UserFactory, RideFactory
 from bookings.models import Booking
 from payments.models import Payment
-from django.utils.timezone import now
-from datetime import timedelta
-from core.models import PlatformFee
 
 
-class PaymentTest(APITestCase):
+class PaymentTestCase(APITestCase):
 
     def setUp(self):
-        PlatformFee.objects.get_or_create(percentage=10)
+        self.user = UserFactory()
+        self.driver = UserFactory(role="DRIVER")
 
-        self.user = User.objects.create(
-            email="test@test.com",
-            phone="123",
-            role="PASSENGER"
-        )
-
-        self.token = str(RefreshToken.for_user(self.user).access_token)
-
-        self.ride = Ride.objects.create(
-            driver=self.user,
-            source="A",
-            destination="B",
-            source_lat=1,
-            source_lng=1,
-            destination_lat=2,
-            destination_lng=2,
-            seats_available=3,
-            price_per_seat=100,
-            status="ACTIVE",
-            date_time=now() + timedelta(hours=1)
-        )
+        self.ride = RideFactory(driver=self.driver)
 
         self.booking = Booking.objects.create(
-            ride=self.ride,
             user=self.user,
+            ride=self.ride,
             seats=1,
             original_amount=100,
             final_amount=100,
-            status="PENDING",
             payment_status="PENDING"
         )
 
-    @patch("payments.views.razorpay.Client")
-    def test_create_payment(self, mock_razorpay):
+        self.client.force_authenticate(user=self.user)
 
-        # ✅ MOCK ORDER CREATION
-        mock_razorpay.return_value.order.create.return_value = {
-            "id": "order_123"
+    # -----------------------------
+    # ✅ CREATE PAYMENT SUCCESS
+    # -----------------------------
+    @patch("payments.views.calculate_amount")
+    @patch("payments.views.razorpay.Client")
+    def test_create_payment_success(self, mock_razorpay, mock_calc):
+        # ✅ mock amount calculation
+        mock_calc.return_value = (100, True)
+        mock_client = mock_razorpay.return_value
+        mock_client.order.create.return_value = {
+            "id": "order_test_123"
         }
 
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
-
-        # ✅ USE reverse() (IMPORTANT)
-        url = reverse("payments:create_payment")  # make sure you named it in urls.py
-
-        # ✅ FIX PAYLOAD
-        res = self.client.post(url, {
+        response = self.client.post("/api/payments/create/", {
             "booking_id": self.booking.id,
-            "amount": self.booking.final_amount
-        }, format="json")
+            "payment_type": "FULL"
+        })
 
-        print("CREATE PAYMENT RESPONSE:", getattr(res, "data", res.content))  # debug
-
-        self.assertEqual(res.status_code, 200)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(Payment.objects.count(), 1)
 
-    @patch("payments.views.razorpay.Client")
-    def test_verify_payment_success(self, mock_razorpay):
+    # -----------------------------
+    # ❌ MISSING DATA
+    # -----------------------------
+    def test_create_payment_missing_data(self):
+        response = self.client.post("/api/payments/create/", {})
 
-        # ✅ MOCK SIGNATURE VERIFY
-        mock_razorpay.return_value.utility.verify_payment_signature.return_value = True
+        self.assertEqual(response.status_code, 400)
+
+    # -----------------------------
+    # ❌ INVALID PAYMENT TYPE
+    # -----------------------------
+    def test_invalid_payment_type(self):
+        response = self.client.post("/api/payments/create/", {
+            "booking_id": self.booking.id,
+            "payment_type": "INVALID"
+        })
+
+        self.assertEqual(response.status_code, 400)
+
+    # -----------------------------
+    # ❌ BOOKING NOT FOUND
+    # -----------------------------
+    def test_booking_not_found(self):
+        response = self.client.post("/api/payments/create/", {
+            "booking_id": 999,
+            "payment_type": "FULL"
+        })
+
+        self.assertEqual(response.status_code, 404)
+
+    # -----------------------------
+    # ❌ NOT YOUR BOOKING
+    # -----------------------------
+    def test_not_your_booking(self):
+        other_user = UserFactory()
+
+        self.client.force_authenticate(user=other_user)
+
+        response = self.client.post("/api/payments/create/", {
+            "booking_id": self.booking.id,
+            "payment_type": "FULL"
+        })
+
+        self.assertEqual(response.status_code, 403)
+
+    # -----------------------------
+    # ❌ ALREADY PAID
+    # -----------------------------
+    def test_already_paid(self):
+        self.booking.payment_status = "PAID"
+        self.booking.save()
+
+        response = self.client.post("/api/payments/create/", {
+            "booking_id": self.booking.id,
+            "payment_type": "FULL"
+        })
+
+        self.assertEqual(response.status_code, 400)
+
+    # -----------------------------
+    # ✅ VERIFY PAYMENT SUCCESS
+    # -----------------------------
+    @patch("payments.views.razorpay.Client")
+    @patch("payments.views.update_booking_after_payment")
+    def test_verify_payment_success(self, mock_update, mock_razorpay):
 
         payment = Payment.objects.create(
             booking=self.booking,
-            razorpay_order_id="order_123",
+            razorpay_order_id="order_test_123",
             amount=100,
+            payment_type="FULL",
             status="CREATED"
         )
 
-        url = reverse("payments:verify_payment")  # ensure named
+        mock_client = mock_razorpay.return_value
+        mock_client.utility.verify_payment_signature.return_value = True
 
-        res = self.client.post(url, {
-            "order_id": "order_123",
+        response = self.client.post("/api/payments/verify/", {
+            "order_id": "order_test_123",
             "payment_id": "pay_123",
-            "signature": "sig_123"
-        }, format="json")
-
-        print("VERIFY RESPONSE:", getattr(res, "data", res.content))  # debug
+            "signature": "valid_signature"
+        })
 
         payment.refresh_from_db()
-        self.booking.refresh_from_db()
 
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(payment.status, "SUCCESS")
-        self.assertEqual(self.booking.payment_status, "PAID")
+
+    # -----------------------------
+    # ❌ VERIFY FAILED
+    # -----------------------------
+    @patch("payments.views.razorpay.Client")
+    def test_verify_payment_fail(self, mock_razorpay):
+
+        payment = Payment.objects.create(
+            booking=self.booking,
+            razorpay_order_id="order_test_123",
+            amount=100,
+            payment_type="FULL",
+            status="CREATED"
+        )
+
+        mock_client = mock_razorpay.return_value
+        mock_client.utility.verify_payment_signature.side_effect = Exception()
+
+        response = self.client.post("/api/payments/verify/", {
+            "order_id": "order_test_123",
+            "payment_id": "pay_123",
+            "signature": "invalid"
+        })
+
+        payment.refresh_from_db()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(payment.status, "FAILED")
+
+    # -----------------------------
+    # ❌ VERIFY MISSING DATA
+    # -----------------------------
+    def test_verify_missing_data(self):
+        response = self.client.post("/api/payments/verify/", {})
+
+        self.assertEqual(response.status_code, 400)

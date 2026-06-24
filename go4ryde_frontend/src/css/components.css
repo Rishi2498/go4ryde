@@ -1,0 +1,59 @@
+/* =========================
+   GLASS
+========================= */
+.glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+/* =========================
+   BUTTONS
+========================= */
+.btn {
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-success {
+    background: #10b981;
+    color: white;
+}
+
+.btn-outline {
+    border: 1px solid #ddd;
+    background: white;
+}
+
+/* =========================
+   STATUS BADGES
+========================= */
+.status {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+}
+
+.status.created {
+    background: #e0f2fe;
+    color: #0284c7;
+}
+
+.status.active {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.status.completed {
+    background: #f3f4f6;
+    color: #444;
+}

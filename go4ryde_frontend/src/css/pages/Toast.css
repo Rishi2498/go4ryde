@@ -1,0 +1,93 @@
+/* =========================
+   TOAST CONTAINER
+========================= */
+.toast {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+
+    padding: 12px 20px;
+    border-radius: 10px;
+
+    font-size: 14px;
+    font-weight: 500;
+
+    color: white;
+    z-index: 9999;
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+
+    animation: slideDown 0.3s ease-out;
+}
+
+/* =========================
+   TOAST TYPES
+========================= */
+.toast-success {
+    background: #10b981;
+    /* green */
+}
+
+.toast-error {
+    background: #ef4444;
+    /* red */
+}
+
+.toast-info {
+    background: #3b82f6;
+    /* blue */
+}
+
+/* =========================
+   OPTIONAL CLOSE BUTTON
+========================= */
+.toast-close {
+    margin-left: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    opacity: 0.8;
+}
+
+.toast-close:hover {
+    opacity: 1;
+}
+
+/* =========================
+   ANIMATION (ENTRY)
+========================= */
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+/* =========================
+   ANIMATION (EXIT - OPTIONAL)
+========================= */
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+
+    to {
+        opacity: 0;
+        transform: translate(-50%, -10px);
+    }
+}
+
+/* apply when removing toast */
+.toast-hide {
+    animation: fadeOut 0.3s ease forwards;
+}

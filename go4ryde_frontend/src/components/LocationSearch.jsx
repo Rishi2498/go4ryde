@@ -1,7 +1,6 @@
 import React, { useRef } from "react";
-import { LoadScript, Autocomplete } from "@react-google-maps/api";
+import {  Autocomplete } from "@react-google-maps/api";
 
-const libraries = ["places"];
 
 export default function LocationSearch({ onSelect }) {
     const autocompleteRef = useRef(null);
@@ -22,20 +21,20 @@ export default function LocationSearch({ onSelect }) {
     };
 
     return (
-        <LoadScript
-            googleMapsApiKey="AIzaSyB4pCEdwk8UuHDtT9gtzmi9UBlCZxLYI1k"
-            libraries={libraries}
+        // <LoadScript
+        //     googleMapsApiKey="AIzaSyB4pCEdwk8UuHDtT9gtzmi9UBlCZxLYI1k"
+        //     libraries={libraries}
+        // >
+        <Autocomplete
+            onLoad={(ref) => (autocompleteRef.current = ref)}
+            onPlaceChanged={handlePlaceChanged}
         >
-            <Autocomplete
-                onLoad={(ref) => (autocompleteRef.current = ref)}
-                onPlaceChanged={handlePlaceChanged}
-            >
-                <input
-                    type="text"
-                    placeholder="Enter location"
-                    style={{ width: "100%", padding: "8px" }}
-                />
-            </Autocomplete>
-        </LoadScript>
+            <input
+                type="text"
+                placeholder="Enter location"
+                style={{ width: "100%", padding: "8px" }}
+            />
+        </Autocomplete>
+        // </LoadScript >
     );
 }

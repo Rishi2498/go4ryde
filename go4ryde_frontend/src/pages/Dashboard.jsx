@@ -1,79 +1,384 @@
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import api from "../utils/axiosInstance";
+
+
 import Navbar from "../components/Navbar";
-import RideSearchForm from "../components/RideSearchForm";
-import MapView from "../components/MapView";
+
+import "../css/pages/Dashboard.css";
+import "../css/base.css";
+
+import heroImg from "../images/hero-illustration.jpeg";
 
 export default function Dashboard() {
-    const [source, setSource] = useState(null);
-    const [destination, setDestination] = useState(null);
-    const [currentLocation, setCurrentLocation] = useState(null);
-    const [polyline, setPolyline] = useState(null);
+
+    const [source, setSource] = useState("");
+
+    const [destination, setDestination] =
+        useState("");
 
     const navigate = useNavigate();
 
-    // 🚀 HANDLE SEARCH CLICK
+    // =====================================
+    // 🚗 LOADING SCREEN
+    // =====================================
+    // =====================================
+    // 🚗 LOADER
+    // =====================================
+    // const [loading, setLoading] =
+    //     useState(true);
+
+    // useEffect(() => {
+
+    //     const start = Date.now();
+
+    //     const loadDashboard = async () => {
+
+    //         try {
+
+    //             await Promise.all([
+
+    //                 api.get("/accounts/profile/"),
+
+    //                 api.get("/rides/")
+
+    //             ]);
+
+
+    //         } catch (err) {
+
+    //             console.log(err);
+
+    //         } finally {
+
+    //             // ✅ MINIMUM 2 SEC LOADER
+    //             const elapsed =
+    //                 Date.now() - start;
+
+    //             const remaining =
+    //                 2000 - elapsed;
+
+    //             if (remaining > 0) {
+
+    //                 setTimeout(() => {
+
+    //                     setLoading(false);
+
+    //                 }, remaining);
+
+    //             } else {
+
+    //                 setLoading(false);
+    //             }
+    //         }
+    //     };
+
+    //     loadDashboard();
+
+    // }, []);
+
+    // // =====================================
+    // // 🔍 SEARCH
+    // // =====================================
     const handleSearch = () => {
+
         if (!source || !destination) {
-            alert("Please select both source and destination");
+
+            alert("Select both locations");
+
             return;
         }
 
-        console.log("✅ Searching rides:", source, destination);
-
-        // ✅ STORE FOR NEXT PAGE
-        localStorage.setItem("ride_search", JSON.stringify({
-            source,
-            destination
-        }));
-
-        // 🚀 NAVIGATE
-        navigate("/route-preview", {
-            state: { source, destination }
-        });
+        navigate("/search");
     };
 
+    // // =====================================
+    // // 🚗 PREMIUM LOADER
+    // // =====================================
+    // if (loading) {
+
+    //     return (
+
+    //         <div className="map-loading">
+
+    //             <div className="road">
+
+    //                 <div className="lane"></div>
+
+    //                 <div className="car">
+    //                     🚗
+    //                 </div>
+
+    //             </div>
+
+    //             <h3>
+    //                 Loading GO4RYDE...
+    //             </h3>
+
+    //             <p>
+    //                 Preparing your ride experience
+    //             </p>
+
+    //         </div>
+    //     );
+    // }
+
+    // =====================================
+    // ✅ PAGE
+    // =====================================
     return (
-        <div className="dashboard">
+
+        <div className="home">
+
             <Navbar />
 
-            <div className="dashboard-content">
+            {/* BACKGROUND */}
+            <div className="bg-pattern"></div>
 
-                <h1>GO4RYDE 🚀</h1>
+            <main className="home-main">
 
-                {/* 🔍 SEARCH FORM */}
-                <RideSearchForm
-                    setSource={setSource}
-                    setDestination={setDestination}
-                />
+                {/* =====================================
+                    HERO
+                ===================================== */}
+                <section className="hero">
 
-                {/* 🔘 SEARCH BUTTON */}
-                <button
-                    onClick={handleSearch}
-                    style={{
-                        marginTop: "10px",
-                        padding: "10px 15px",
-                        background: "#10b981",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "6px",
-                        cursor: "pointer"
-                    }}
-                >
-                    🔍 Search Rides
-                </button>
+                    {/* LEFT */}
+                    <div className="hero-left">
 
-                {/* 🗺️ MAP */}
-                <MapView
-                    source={source}
-                    destination={destination}
-                    currentLocation={currentLocation}
-                    polyline={polyline}
-                    setSource={setSource}
-                    setDestination={setDestination}
-                />
+                        <div className="badge">
+                            🚀 Over 10,000 rides shared this month
+                        </div>
 
-            </div>
+                        <h1 className="hero-title">
+
+                            Your commute,
+                            <br />
+
+                            <span>
+                                shared & smarter.
+                            </span>
+
+                        </h1>
+
+                        <p className="hero-sub">
+
+                            Join our community of
+                            verified drivers and passengers.
+
+                            Save money, reduce traffic,
+                            and travel smarter.
+
+                        </p>
+
+                        <div className="hero-buttons">
+
+                            <button
+                                className="btn-primary"
+                                onClick={() =>
+                                    navigate("/rides")
+                                }
+                            >
+                                🔍 Find a Ride
+                            </button>
+
+                            <button
+                                className="btn-secondary"
+                                onClick={() =>
+                                    navigate("/create-ride")
+                                }
+                            >
+                                ➕ Offer a Ride
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                    {/* RIGHT */}
+                    <div className="hero-right">
+
+                        <div className="hero-glow"></div>
+
+                        <img
+                            src={heroImg}
+                            alt="Car sharing journey"
+                            className="hero-img float"
+                        />
+
+                        {/* CARD 1 */}
+                        <div className="floating-card top-card">
+
+                            <div className="icon green">
+                                🛡
+                            </div>
+
+                            <div>
+
+                                <p className="small">
+                                    Verified
+                                </p>
+
+                                <p className="bold">
+                                    Safe Drivers
+                                </p>
+
+                            </div>
+
+                        </div>
+
+                        {/* CARD 2 */}
+                        <div className="floating-card bottom-card">
+
+                            <div className="icon blue">
+                                💳
+                            </div>
+
+                            <div>
+
+                                <p className="small">
+                                    Save up to
+                                </p>
+
+                                <p className="bold">
+                                    50% on travel
+                                </p>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </section>
+
+                {/* =====================================
+                    SEARCH
+                ===================================== */}
+                <div className="search-card">
+
+                    <input
+                        placeholder="From location"
+                        value={source}
+                        onChange={(e) =>
+                            setSource(e.target.value)
+                        }
+                    />
+
+                    <input
+                        placeholder="To location"
+                        value={destination}
+                        onChange={(e) =>
+                            setDestination(e.target.value)
+                        }
+                    />
+
+                    <button onClick={handleSearch}>
+                        Find Rides
+                    </button>
+
+                </div>
+
+                {/* =====================================
+                    FEATURES
+                ===================================== */}
+                <section className="features-section">
+
+                    <div className="features-container">
+
+                        {/* HEADER */}
+                        <div className="features-header">
+
+                            <h2>
+                                Why choose GO4RYDE?
+                            </h2>
+
+                            <p>
+
+                                We're making intercity travel
+                                simpler, more affordable,
+                                and surprisingly enjoyable.
+
+                            </p>
+
+                        </div>
+
+                        {/* GRID */}
+                        <div className="features-grid">
+
+                            {/* CARD 1 */}
+                            <div className="feature-card glass">
+
+                                <div className="feature-icon">
+                                    📍
+                                </div>
+
+                                <h3>
+                                    Your pick of rides
+                                    at low prices
+                                </h3>
+
+                                <p>
+
+                                    No matter where you're going,
+                                    find the perfect ride from
+                                    our wide selection of routes
+                                    at low prices.
+
+                                </p>
+
+                            </div>
+
+                            {/* CARD 2 */}
+                            <div className="feature-card glass">
+
+                                <div className="feature-icon">
+                                    🛡
+                                </div>
+
+                                <h3>
+                                    Trust who you travel with
+                                </h3>
+
+                                <p>
+
+                                    We verify profiles, reviews,
+                                    and IDs so you travel safely
+                                    with trusted drivers.
+
+                                </p>
+
+                            </div>
+
+                            {/* CARD 3 */}
+                            <div className="feature-card glass">
+
+                                <div className="feature-icon">
+                                    ⭐
+                                </div>
+
+                                <h3>
+                                    Scroll, click,
+                                    tap and go!
+                                </h3>
+
+                                <p>
+
+                                    Book rides instantly with
+                                    a smooth experience powered
+                                    by smart technology.
+
+                                </p>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </section>
+
+            </main>
+
         </div>
     );
 }

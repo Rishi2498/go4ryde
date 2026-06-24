@@ -26,19 +26,42 @@ class CreateBookingSerializer(serializers.ModelSerializer):
         seats = data.get("seats")
 
         if not ride:
-            raise serializers.ValidationError("Ride is required")
+            raise serializers.ValidationError({
+                "ride": "Ride is required"
+            })
 
         if ride.status not in ["ACTIVE", "CREATED", "SCHEDULED"]:
-            raise serializers.ValidationError("Ride is not available")
+            raise serializers.ValidationError({
+                "ride": f"Ride is {ride.status}"
+            })
 
         if not seats or seats <= 0:
-            raise serializers.ValidationError("Invalid seats")
+            raise serializers.ValidationError({
+                "seats": "Invalid seats"
+            })
+
+        # DEBUG
+        remaining = ride.seats_available - ride.seats_booked
+
+        print("========== BOOKING DEBUG ==========")
+        print("Ride:", ride.id)
+        print("Status:", ride.status)
+        print("Seats Requested:", seats)
+        print("Seats Available:", ride.seats_available)
+        print("Seats Booked:", ride.seats_booked)
+        print("Remaining:", remaining)
+        print("Can Book:", ride.can_book(seats))
+        print("===================================")
 
         if not ride.can_book(seats):
-            raise serializers.ValidationError("Not enough seats available")
+            raise serializers.ValidationError({
+                "seats": (
+                    f"Requested {seats}, "
+                    f"but only {remaining} seats remaining"
+                )
+            })
 
         return data
-
     # -------------------------
     # 🚀 CREATE BOOKING
     # -------------------------
@@ -106,12 +129,16 @@ class CreateBookingSerializer(serializers.ModelSerializer):
 class BookingMiniSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source="user.email")
     ride_id = serializers.IntegerField(source="ride.id", read_only=True)
-
+    phone = serializers.CharField(
+        source="user.phone",
+        read_only=True
+    )
     class Meta:
         model = Booking
         fields = [
             "id",
             "user_email",
+            "phone",
             "seats",
             "status",
             "ride_id"

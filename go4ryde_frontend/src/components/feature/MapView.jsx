@@ -1,11 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { GoogleMap, Marker, Polyline } from "@react-google-maps/api";
 
-const containerStyle = {
-  width: "100%",
-  height: "500px",
-};
-
 // ICONS
 const sourceIcon = {
   url: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
@@ -25,9 +20,15 @@ export default function MapView({
   currentLocation,
   polyline,
   setSource,
-  setDestination
+  setDestination,
+  height = "500px"
 }) {
   const mapRef = useRef(null);
+
+  const containerStyle = {
+    width: "100%",
+    height: height,
+  };
 
   // 🚗 DRIVER FOLLOW MODE
   useEffect(() => {
@@ -52,7 +53,7 @@ export default function MapView({
   }, [source, destination, currentLocation]);
 
   return (
-    <div style={{ width: "100%", height: "500px" }}>
+    <div style={{ width: "100%", height: height }}>
       <GoogleMap
         mapContainerStyle={containerStyle}
         center={
@@ -77,7 +78,7 @@ export default function MapView({
       >
         {source && <Marker position={source} icon={sourceIcon} />}
         {destination && <Marker position={destination} icon={destinationIcon} />}
-        {currentLocation && <Marker position={currentLocation} icon={driverIcon} />}
+        {currentLocation && <Marke position={currentLocation} icon={driverIcon} />}
 
         {polyline && polyline.length > 1 && (
           <Polyline

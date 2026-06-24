@@ -1,0 +1,338 @@
+/* =========================
+   PAGE
+========================= */
+.search-page {
+    min-height: 100vh;
+    background: linear-gradient(135deg, rgba(239, 246, 255, 0.5) 0%, #ffffff 50%, rgba(209, 250, 229, 0.5) 100%);
+    color: #0f172a;
+}
+
+/* =========================
+   HERO SEARCH
+========================= */
+.search-hero {
+    padding: 100px 20px 60px;
+    text-align: center;
+}
+
+.search-heading {
+    font-size: 3.5rem;
+    font-weight: 800;
+    margin-bottom: 40px;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+    background: linear-gradient(to right, #0f172a, #334155);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* SEARCH CARD */
+.search-glass {
+    max-width: 900px;
+    margin: auto;
+    padding: 16px 20px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 20px 40px -15px rgba(16, 185, 129, 0.15), 0 10px 20px -10px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-sizing: border-box;
+}
+
+/* INPUT ROW */
+.search-form {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex: 1;
+}
+
+/* INPUT BOX */
+.search-box {
+    flex: 1;
+    display: flex;
+    gap: 16px;
+}
+
+.search-box>div,
+.search-box input {
+    flex: 1;
+    width: 100%;
+}
+
+.search-box input {
+    padding: 16px 20px;
+    border-radius: 9999px;
+    border: 1px solid transparent;
+    background: #f1f5f9;
+    font-size: 15px;
+    color: #0f172a;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.search-box input:focus {
+    background: #ffffff;
+    border-color: #10b981;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+}
+
+/* SEARCH BUTTON */
+.search-btn {
+    padding: 16px 32px;
+    border-radius: 9999px;
+    background: linear-gradient(to right, #10b981, #059669);
+    color: white;
+    border: none;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+
+.search-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+/* RESET */
+.search-actions {
+    margin-left: 16px;
+}
+
+.reset-btn {
+    padding: 12px 20px;
+    border-radius: 9999px;
+    background: transparent;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.reset-btn:hover {
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+/* =========================
+   RESULTS
+========================= */
+.search-container {
+    max-width: 900px;
+    margin: auto;
+    padding: 20px 20px 80px;
+}
+
+.ride-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    color: #0f172a;
+}
+
+/* STATUS COLORS FOR RIDE CARD */
+.status {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    width: fit-content;
+    font-weight: 600;
+}
+
+.status.created {
+    background: #e0f2fe;
+    color: #0284c7;
+}
+
+.status.active {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.status.completed {
+    background: #f3f4f6;
+    color: #444;
+}
+
+/* BOOK BTN OVERRIDE FOR SEARCH */
+.book-btn {
+    background: #0f172a;
+    color: white;
+    border: none;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.book-btn:hover:not(:disabled) {
+    background: #1e293b;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+}
+
+.book-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-outline {
+    background: white;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.btn-outline:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+}
+
+/* =========================
+   🔥 FORCE ROW STYLE (SEARCH)
+========================= */.ride-list {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 16px;
+}
+
+/* override old card */
+.search-card {
+    display: none;
+    /* ❌ disable old card UI */
+}
+
+/* NEW ROW CARD */
+.ride-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    padding: 18px 20px;
+    border-radius: 16px;
+
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(12px);
+
+    border: 1px solid #eee;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+
+    transition: 0.25s ease;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.ride-card:hover {
+    transform: translateY(-2px);
+}
+
+/* LEFT */
+.ride-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+}
+
+/* ROUTE FIX */
+.route {
+    max-width: 520px;
+    width: 100%;
+    min-width: 0;
+}
+
+.from,
+.to {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+    min-width: 0;
+}
+
+/* RIGHT */
+.ride-right {
+    display: flex;
+    gap: 10px;
+}
+
+/* BUTTON SIZE MATCH */
+.book-btn,
+.route-btn {
+    padding: 10px 16px;
+    border-radius: 10px;
+}
+
+/* FULL */
+.ride-card.full {
+    opacity: 0.6;
+}
+
+/* MOBILE */
+@media (max-width: 768px) {
+    .search-heading {
+        font-size: 2.2rem;
+    }
+
+    .search-glass {
+        flex-direction: column;
+        border-radius: 24px;
+        padding: 20px;
+    }
+
+    .search-form {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .search-box {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .search-btn {
+        width: 100%;
+        border-radius: 16px;
+        padding: 14px;
+    }
+
+    .search-actions {
+        margin-left: 0;
+        margin-top: 12px;
+        width: 100%;
+    }
+
+    .reset-btn {
+        width: 100%;
+        border-radius: 16px;
+        padding: 14px;
+    }
+
+    .ride-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .ride-right {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .book-btn,
+    .route-btn {
+        width: 100%;
+    }
+}

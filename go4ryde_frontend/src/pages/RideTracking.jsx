@@ -43,7 +43,6 @@ export default function RideTracking() {
     return (
         <div style={{ padding: "20px" }}>
             <h2>🚗 Live Tracking</h2>
-
             <MapView
                 currentLocation={
                     driverLocation || { lat: 17.385, lng: 78.486 }

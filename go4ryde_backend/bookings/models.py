@@ -23,11 +23,21 @@ class Booking(models.Model):
     original_amount = models.FloatField()
     final_amount = models.FloatField()
 
-    coupon = models.ForeignKey(Coupon, on_delete=models.SET_NULL, null=True, blank=True)
-
+    coupon = models.ForeignKey(Coupon, on_delete=models.SET_NULL, null=True, blank=True) 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
-    payment_status = models.CharField(max_length=20, default="PENDING")  # 🔥 NEW
-
+    remaining_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    #payment_status = models.CharField(max_length=20, default="PENDING")
+    payment_status = models.CharField(
+    max_length=30,
+    choices=[
+        ("PENDING", "Pending"),
+        ("PARTIALLY_PAID", "Partially Paid"),
+        ("PAID", "Paid"),
+        ("Cash", "Cash")
+    ],
+    default="PENDING"
+)
+    expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

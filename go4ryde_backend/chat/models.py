@@ -6,24 +6,33 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 
-# ✅ ONE ROOM PER RIDE (GROUP CHAT)
+## chat/models.py
+
 class ChatRoom(models.Model):
-    ride = models.OneToOneField(
-        "rides.Ride",
+
+    booking = models.OneToOneField(
+        "bookings.Booking",
         on_delete=models.CASCADE,
         related_name="chat_room"
     )
 
-    participants = models.ManyToManyField(
+    driver = models.ForeignKey(
         User,
-        related_name="chat_rooms"
+        on_delete=models.CASCADE,
+        related_name="driver_chats"
+    )
+
+    passenger = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="passenger_chats"
     )
 
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Ride {self.ride.id} ChatRoom"
+        return f"{self.driver} ↔ {self.passenger}"
 
 
 # ✅ MESSAGES
@@ -45,7 +54,7 @@ class Message(models.Model):
     is_delivered = models.BooleanField(default=False)
     is_read = models.BooleanField(default=False)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True,db_index=True)
 
     class Meta:
         ordering = ["created_at"]

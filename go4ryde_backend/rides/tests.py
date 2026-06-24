@@ -1,181 +1,228 @@
-from django.urls import reverse
 from rest_framework.test import APITestCase
-from rest_framework import status
-from accounts.models import User
-from rides.models import Ride
+from unittest.mock import patch
+
+from core.factories import UserFactory, RideFactory
 from bookings.models import Booking
-from rest_framework_simplejwt.tokens import RefreshToken
-
-from core.models import PlatformFee
+from chat.models import ChatRoom
 
 
-class RideFlowTest(APITestCase):
+class RideTestCase(APITestCase):
 
     def setUp(self):
-        PlatformFee.objects.get_or_create(percentage=10)
+        self.driver = UserFactory(role="DRIVER")
+        self.passenger = UserFactory()
 
-        # 🔥 CREATE USERS
-        self.driver = User.objects.create(email="driver@test.com", phone="1111111111", role="DRIVER")
-        self.passenger = User.objects.create(email="pass@test.com", phone="2222222222", role="PASSENGER")
+        self.client.force_authenticate(user=self.driver)
 
-        # 🔐 TOKENS
-        self.driver_token = str(RefreshToken.for_user(self.driver).access_token)
-        self.passenger_token = str(RefreshToken.for_user(self.passenger).access_token)
+    # -----------------------------
+    # ✅ CREATE RIDE (DRIVER)
+    # -----------------------------
+    @patch("rides.views.requests.get")
+    def test_create_ride_success(self, mock_get):
 
-        # 🔗 URLs
-        self.create_ride_url = "/api/rides/"
-        self.search_url = "/api/rides/search/"
-
-    # ============================
-    # 🚀 CREATE RIDE TEST
-    # ============================
-    def test_create_ride(self):
-
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.driver_token}")
-
-        data = {
-            "source": "A",
-            "destination": "B",
-            "source_lat": 10.0,
-            "source_lng": 20.0,
-            "destination_lat": 11.0,
-            "destination_lng": 21.0,
-            "seats_available": 3,
-            "price_per_seat": 100,
-            "date_time": "2030-01-01T10:00:00Z"
+        mock_get.return_value.json.return_value = {
+            "status": "OK",
+            "routes": [{
+                "legs": [{
+                    "distance": {"value": 10000},
+                    "duration": {"value": 600}
+                }],
+                "overview_polyline": {"points": "abc"}
+            }]
         }
 
-        res = self.client.post(self.create_ride_url, data)
-
-        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(Ride.objects.count(), 1)
-
-    # ============================
-    # 🔍 SEARCH TEST
-    # ============================
-    def test_search_rides(self):
-
-        Ride.objects.create(
-            driver=self.driver,
-            source="A",
-            destination="B",
-            source_lat=10,
-            source_lng=20,
-            destination_lat=11,
-            destination_lng=21,
-            seats_available=3,
-            price_per_seat=100,
-            date_time="2030-01-01T10:00:00Z"
+        response = self.client.post("/api/rides/", {
+            "source": "A",
+            "source_lat": 17.0,
+            "source_lng": 78.0,
+            "destination": "B",
+            "destination_lat": 18.0,
+            "destination_lng": 79.0,
+            "date_time": "2030-01-01T10:00:00Z",
+            "price_per_seat": 100,
+            "seats_available": 3
+        },
         )
 
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.passenger_token}")
 
-        res = self.client.post(self.search_url, {})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(ChatRoom.objects.count(), 1)
 
-        self.assertEqual(res.status_code, 200)
-        self.assertGreater(len(res.data), 0)
+    # -----------------------------
+    # ❌ PASSENGER CANNOT CREATE
+    # -----------------------------
+    def test_create_ride_not_driver(self):
+        self.client.force_authenticate(user=self.passenger)
 
-    # ============================
-    # 🚀 BOOK RIDE TEST
-    # ============================
-    def test_booking_flow(self):
-
-        ride = Ride.objects.create(
-            driver=self.driver,
-            source="A",
-            destination="B",
-            source_lat=10,
-            source_lng=20,
-            destination_lat=11,
-            destination_lng=21,
-            seats_available=3,
-            price_per_seat=100,
-            date_time="2030-01-01T10:00:00Z"
-        )
-
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.passenger_token}")
-
-        res = self.client.post("/api/bookings/create/", {
-            "ride": ride.id,
-            "seats": 1
+        response = self.client.post("/api/rides/", {
+            "source": "A",
+            "destination": "B"
         })
 
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(Booking.objects.count(), 1)
+        self.assertEqual(response.status_code, 403)
 
-    # ============================
-    # ✅ ACCEPT BOOKING TEST
-    # ============================
-    def test_accept_booking(self):
+    # -----------------------------
+    # ✅ MY RIDES
+    # -----------------------------
+    def test_my_rides(self):
+        RideFactory(driver=self.driver)
 
-        ride = Ride.objects.create(
-            driver=self.driver,
-            source="A",
-            destination="B",
-            source_lat=10,
-            source_lng=20,
-            destination_lat=11,
-            destination_lng=21,
-            seats_available=3,
-            price_per_seat=100,
-            date_time="2030-01-01T10:00:00Z"
+        response = self.client.get("/api/rides/my_rides/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+
+    # -----------------------------
+    # ✅ SEARCH RIDES
+    # -----------------------------
+    def test_search_rides(self):
+        RideFactory(driver=self.driver)
+
+        response = self.client.post("/api/rides/search/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(len(response.data) >= 1)
+
+    # -----------------------------
+    # ✅ CALCULATE ROUTE
+    # -----------------------------
+    @patch("rides.views.requests.get")
+    def test_calculate_route(self, mock_get):
+
+        mock_get.return_value.json.return_value = {
+            "routes": [{
+                "legs": [{
+                    "distance": {"value": 10000},
+                    "duration": {"value": 600}
+                }]
+            }]
+        }
+
+        response = self.client.post(
+            "/api/rides/calculate-route/",
+            {
+                "source": {"lat": 17, "lng": 78},
+                "destination": {"lat": 18, "lng": 79}
+            },
+            format="json"   # 🔥 REQUIRED
         )
 
+        self.assertEqual(response.status_code, 200)
+
+
+    def test_calculate_route_invalid(self):
+        response = self.client.post(
+            "/api/rides/calculate-route/",
+            {},
+            format="json"   # 🔥 REQUIRED
+        )
+
+        self.assertEqual(response.status_code, 400)
+    # -----------------------------
+    # ✅ ACCEPT BOOKING
+    # -----------------------------
+    def test_accept_booking(self):
+        ride = RideFactory(driver=self.driver)
+
         booking = Booking.objects.create(
-            ride=ride,
             user=self.passenger,
+            ride=ride,
             seats=1,
             original_amount=100,
             final_amount=100,
-            status="PENDING",
-            payment_status="PAID"
+            payment_status=["PAID", "Cash"],
         )
 
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.driver_token}")
-
-        res = self.client.post(f"/api/rides/accept/{booking.id}/")
-
-        self.assertEqual(res.status_code, 200)
+        response = self.client.post(f"/api/rides/accept/{booking.id}/")
 
         booking.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(booking.status, "CONFIRMED")
 
-    # ============================
-    # 🚗 START RIDE TEST
-    # ============================
-    def test_start_ride(self):
-
-        ride = Ride.objects.create(
-            driver=self.driver,
-            source="A",
-            destination="B",
-            source_lat=10,
-            source_lng=20,
-            destination_lat=11,
-            destination_lng=21,
-            seats_available=3,
-            price_per_seat=100,
-            date_time="2030-01-01T10:00:00Z"
-        )
+    # -----------------------------
+    # ❌ ACCEPT NOT DRIVER
+    # -----------------------------
+    def test_accept_not_driver(self):
+        ride = RideFactory(driver=self.driver)
 
         booking = Booking.objects.create(
-            ride=ride,
             user=self.passenger,
+            ride=ride,
             seats=1,
             original_amount=100,
             final_amount=100,
-            status="CONFIRMED",
             payment_status="PAID"
         )
 
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.driver_token}")
+        self.client.force_authenticate(user=self.passenger)
 
-        res = self.client.post(f"/api/rides/start/{booking.id}/")
+        response = self.client.post(f"/api/rides/accept/{booking.id}/")
 
-        self.assertEqual(res.status_code, 200)
+        self.assertEqual(response.status_code, 403)
+
+    # -----------------------------
+    # ❌ ACCEPT WITHOUT PAYMENT
+    # -----------------------------
+    def test_accept_without_payment(self):
+        ride = RideFactory(driver=self.driver)
+
+        booking = Booking.objects.create(
+            user=self.passenger,
+            ride=ride,
+            seats=1,
+            original_amount=100,
+            final_amount=100,
+            payment_status="PENDING"
+        )
+
+        response = self.client.post(f"/api/rides/accept/{booking.id}/")
+
+        self.assertEqual(response.status_code, 400)
+
+    # -----------------------------
+    # ✅ START RIDE
+    # -----------------------------
+    def test_start_ride(self):
+        ride = RideFactory(driver=self.driver)
+
+        booking = Booking.objects.create(
+            user=self.passenger,
+            ride=ride,
+            seats=1,
+            original_amount=100,
+            final_amount=100,
+            payment_status="PAID",
+            status="CONFIRMED"
+        )
+
+        response = self.client.post(f"/api/rides/start/{booking.id}/")
 
         booking.refresh_from_db()
         ride.refresh_from_db()
 
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(booking.status, "STARTED")
         self.assertEqual(ride.status, "ACTIVE")
+
+    # -----------------------------
+    # ❌ START NOT DRIVER
+    # -----------------------------
+    def test_start_not_driver(self):
+        ride = RideFactory(driver=self.driver)
+
+        booking = Booking.objects.create(
+            user=self.passenger,
+            ride=ride,
+            seats=1,
+            original_amount=100,
+            final_amount=100,
+            payment_status="PAID",
+            status="CONFIRMED"
+        )
+
+        self.client.force_authenticate(user=self.passenger)
+
+        response = self.client.post(f"/api/rides/start/{booking.id}/")
+
+        self.assertEqual(response.status_code, 403)

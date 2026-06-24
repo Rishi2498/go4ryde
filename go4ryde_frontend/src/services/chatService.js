@@ -49,7 +49,7 @@ const normalizeMessage = (msg) => {
  */
 export const getMessages = async (rideId) => {
     try {
-        const res = await API.get(`/chat/${rideId}/messages/`);
+        const res = await API.get(`/chat/${rideId}/`);
 
         return res.data.map(normalizeMessage);
 
@@ -68,7 +68,7 @@ export const getMessages = async (rideId) => {
  */
 export const markRead = async (rideId) => {
     try {
-        const res = await API.post(`/chat/${rideId}/read/`);
+        const res = await API.post(`/chat/read/${rideId}/`);
         return res.data;
 
     } catch (error) {
@@ -86,7 +86,7 @@ export const markRead = async (rideId) => {
  */
 export const sendMessageAPI = async (rideId, message) => {
     try {
-        const res = await API.post(`/chat/${rideId}/send/`, { message });
+        const res = await API.post(`/chat/send/${rideId}/`, { message });
 
         return normalizeMessage({
             ...res.data,

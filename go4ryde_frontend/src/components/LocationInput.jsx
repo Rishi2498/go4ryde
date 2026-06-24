@@ -1,10 +1,17 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import { Autocomplete } from "@react-google-maps/api";
 
-export default function LocationInput({ placeholder, onSelect }) {
+export default function LocationInput({ placeholder, value, onSelect }) {
     const autoRef = useRef(null);
+    const inputRef = useRef(null);
 
-    // 🚨 SAFETY CHECK
+    // 🔥 CLEAR INPUT WHEN RESET
+    useEffect(() => {
+        if (!value && inputRef.current) {
+            inputRef.current.value = "";
+        }
+    }, [value]);
+
     if (!window.google) {
         return <input placeholder="Loading map..." disabled />;
     }
@@ -14,11 +21,18 @@ export default function LocationInput({ placeholder, onSelect }) {
 
         if (!place || !place.geometry) return;
 
-        onSelect({
+        const location = {
             lat: place.geometry.location.lat(),
             lng: place.geometry.location.lng(),
             name: place.formatted_address,
-        });
+        };
+
+        onSelect(location);
+
+        // ✅ update visible text
+        if (inputRef.current) {
+            inputRef.current.value = location.name;
+        }
     };
 
     return (
@@ -27,12 +41,9 @@ export default function LocationInput({ placeholder, onSelect }) {
             onPlaceChanged={handlePlaceChanged}
         >
             <input
+                ref={inputRef}
                 placeholder={placeholder}
-                style={{
-                    width: "100%",
-                    padding: "10px",
-                    marginBottom: "10px",
-                }}
+                className="search-input"
             />
         </Autocomplete>
     );

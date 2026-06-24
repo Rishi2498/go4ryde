@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from accounts.models import User, DriverProfile
 import re
+from payments.models import Wallet, BankAccount
+from payments.serializers import BankAccountSerializer
 
 # ---------------- REGISTER ----------------
 class RegisterSerializer(serializers.Serializer):
@@ -56,18 +58,24 @@ class DriverProfileSerializer(serializers.ModelSerializer):
 
 class PassengerProfileSerializer(serializers.ModelSerializer):
     profile_image = serializers.ImageField(source='profile.image', read_only=True)
+    wallet_balance = serializers.SerializerMethodField()  # ✅ NEW
 
     class Meta:
         model = User
-        fields = ['email', 'phone', 'role', 'profile_image']
+        fields = ['email', 'phone', 'role', 'profile_image', 'wallet_balance']
 
+    def get_wallet_balance(self, obj):
+        wallet, _ = Wallet.objects.get_or_create(user=obj)
+        return wallet.balance
 
 # ---------------- DRIVER VIEW ----------------
 class DriverProfileViewSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(source='user.email')
-    phone = serializers.CharField(source='user.phone')
-    role = serializers.CharField(source='user.role')  # ✅ IMPORTANT
+    email = serializers.EmailField(source='user.email', read_only=True)
+    phone = serializers.CharField(source='user.phone', read_only=True)
+    role = serializers.CharField(source='user.role', read_only=True)
 
+    wallet_balance = serializers.SerializerMethodField()  # ✅ NEW
+    bank_account = serializers.SerializerMethodField()
     class Meta:
         model = DriverProfile
         fields = [
@@ -77,5 +85,20 @@ class DriverProfileViewSerializer(serializers.ModelSerializer):
             'vehicle_number',
             'dl_image',
             'rc_image',
-            'profile_image'
+            'profile_image',
+            'bank_account',
+            'wallet_balance'   # ✅ IMPORTANT
         ]
+
+    def get_wallet_balance(self, obj):
+        wallet, _ = Wallet.objects.get_or_create(user=obj.user)
+        return wallet.balance
+
+    def get_bank_account(self, obj):
+
+        try:
+           bank = BankAccount.objects.get(user=obj.user)
+           return (BankAccountSerializer(bank).data)
+        except BankAccount.DoesNotExist:
+
+            return None

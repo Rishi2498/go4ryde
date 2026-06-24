@@ -1,12 +1,12 @@
 import React, { useEffect, useRef } from "react";
-import { GoogleMap, Marker, Polyline, LoadScript } from "@react-google-maps/api";
+import {
+    GoogleMap,
+    Marker,
+    Polyline,
+} from "@react-google-maps/api";
 
-const containerStyle = {
-    width: "100%",
-    height: "500px", // ✅ IMPORTANT (prevents invisible map)
-};
+import "../css/pages/MapView.css";
 
-// 🔥 ICONS
 const sourceIcon = {
     url: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
 };
@@ -28,23 +28,31 @@ export default function MapView({
 
     const mapRef = useRef(null);
 
-    // 🚗 DRIVER FOLLOW MODE (LIKE UBER)
+    // 🚗 DRIVER FOLLOW MODE
     useEffect(() => {
+
         if (!mapRef.current || !currentLocation) return;
 
         mapRef.current.panTo(currentLocation);
-        mapRef.current.setZoom(15); // 🔥 STREET LEVEL
+
+        mapRef.current.setZoom(15);
 
     }, [currentLocation]);
 
-    // 📍 ROUTE VIEW (ONLY when NO driver)
+    // 📍 AUTO FIT ROUTE
     useEffect(() => {
+
         if (!mapRef.current || currentLocation) return;
 
-        const bounds = new window.google.maps.LatLngBounds();
+        if (!window.google) return;
+
+        const bounds =
+            new window.google.maps.LatLngBounds();
 
         if (source) bounds.extend(source);
-        if (destination) bounds.extend(destination);
+
+        if (destination)
+            bounds.extend(destination);
 
         if (!bounds.isEmpty()) {
             mapRef.current.fitBounds(bounds);
@@ -53,52 +61,83 @@ export default function MapView({
     }, [source, destination, currentLocation]);
 
     return (
-        <div style={{ width: "100%", height: "500px" }}>
-            <LoadScript googleMapsApiKey="AIzaSyB4pCEdwk8UuHDtT9gtzmi9UBlCZxLYI1k">
-                <GoogleMap
-                    mapContainerStyle={containerStyle}
-                    center={
-                        currentLocation ||
-                        source ||
-                        { lat: 20.5937, lng: 78.9629 }
+        <div className="map-wrapper">
+
+            <GoogleMap
+                mapContainerClassName="google-map"
+
+                center={
+                    currentLocation ||
+                    source || {
+                        lat: 20.5937,
+                        lng: 78.9629,
                     }
-                    zoom={15}
-                    onLoad={(map) => (mapRef.current = map)}
-                >
+                }
 
-                    {/* 🟢 SOURCE */}
-                    {source && (
-                        <Marker position={source} icon={sourceIcon} />
-                    )}
+                zoom={15}
 
-                    {/* 🔴 DESTINATION */}
-                    {destination && (
-                        <Marker position={destination} icon={destinationIcon} />
-                    )}
+                onLoad={(map) => {
+                    mapRef.current = map;
+                }}
 
-                    {/* 🔵 DRIVER */}
-                    {currentLocation && (
-                        <Marker
-                            position={currentLocation}
-                            icon={driverIcon}
-                            title="Live Driver Location"
-                        />
-                    )}
+                options={{
+                    disableDefaultUI: true,
+                    zoomControl: true,
+                    fullscreenControl: true,
+                    streetViewControl: false,
+                    mapTypeControl: false,
+                }}
+            >
 
-                    {/* 🛣 ROUTE */}
-                    {polyline && polyline.length > 1 && (
+                {/* SOURCE */}
+                {source && (
+                    <Marker
+                        position={source}
+                        icon={sourceIcon}
+                    />
+                )}
+
+                {/* DESTINATION */}
+                {destination && (
+                    <Marker
+                        position={destination}
+                        icon={destinationIcon}
+                    />
+                )}
+
+                {/* DRIVER */}
+                {currentLocation && (
+                    <Marker
+                        position={currentLocation}
+                        icon={driverIcon}
+                        title="Driver"
+                    />
+                )}
+
+                {/* ROUTE */}
+                {polyline &&
+                    polyline.length > 1 && (
                         <Polyline
                             path={polyline}
                             options={{
-                                strokeColor: "#10b981",
+                                strokeColor: "#2563eb",
                                 strokeOpacity: 0.9,
                                 strokeWeight: 5,
                             }}
                         />
                     )}
 
-                </GoogleMap>
-            </LoadScript>
+            </GoogleMap>
+
         </div>
     );
 }
+
+
+
+
+
+
+
+
+{/* <LoadScript googleMapsApiKey="AIzaSyB4pCEdwk8UuHDtT9gtzmi9UBlCZxLYI1k"> */ }

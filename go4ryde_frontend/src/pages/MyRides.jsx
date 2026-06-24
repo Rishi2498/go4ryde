@@ -1,264 +1,76 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { getMyRides } from "../api/rideService";
-import api from "../utils/axiosInstance";
 import { useNavigate } from "react-router-dom";
+import "../css/pages/MyRides.css";
 
 export default function MyRides() {
-
     const [rides, setRides] = useState([]);
-    const [loading, setLoading] = useState(false);
-
     const navigate = useNavigate();
-
-    // 🔥 WebSocket + GPS refs
-    const socketRef = useRef(null);
-    const watchIdRef = useRef(null);
 
     useEffect(() => {
         fetchRides();
-        return () => stopTracking();
     }, []);
 
-    // ================================
-    // 🚀 FETCH RIDES
-    // ================================
     const fetchRides = async () => {
-        try {
-            setLoading(true);
-
-            const res = await getMyRides();
-
-            // ✅ HANDLE BOTH CASES
-            const data = res?.data || res;
-            setRides(Array.isArray(data) ? data : []);
-
-            console.log("🚗 My Rides:", data);
-
-        } catch (err) {
-            console.error("❌ Fetch rides error:", err);
-        } finally {
-            setLoading(false);
-        }
+        const res = await getMyRides();
+        setRides(res.data || []);
     };
 
-    // ================================
-    // ✅ ACCEPT BOOKING
-    // ================================
-    const acceptBooking = async (bookingId) => {
-        try {
-            await api.post(`/bookings/accept/${bookingId}/`);
-            alert("Booking Accepted ✅");
-            fetchRides();
-        } catch (err) {
-            alert("Error accepting booking");
-        }
-    };
-
-    // ================================
-    // 🚗 START TRACKING
-    // ================================
-    const startTracking = (rideId) => {
-
-        stopTracking(); // prevent duplicate
-
-        socketRef.current = new WebSocket(
-            `ws://127.0.0.1:8000/ws/tracking/${rideId}/`
-        );
-
-        socketRef.current.onopen = () => {
-            console.log("✅ Tracking Connected");
-        };
-
-        socketRef.current.onerror = (err) => {
-            console.error("❌ WebSocket Error:", err);
-        };
-
-        socketRef.current.onclose = () => {
-            console.log("🔌 Tracking Closed");
-        };
-
-        let lastSent = 0;
-
-        watchIdRef.current = navigator.geolocation.watchPosition((pos) => {
-
-            const now = Date.now();
-
-            if (now - lastSent > 1000) {
-                const coords = {
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude
-                };
-
-                if (socketRef.current?.readyState === WebSocket.OPEN) {
-                    socketRef.current.send(JSON.stringify(coords));
-                }
-
-                lastSent = now;
-            }
-
-        }, (err) => {
-            console.error("GPS error:", err);
-        });
-    };
-
-    // ================================
-    // 🛑 STOP TRACKING
-    // ================================
-    const stopTracking = () => {
-
-        if (socketRef.current) {
-            socketRef.current.close();
-            socketRef.current = null;
-        }
-
-        if (watchIdRef.current) {
-            navigator.geolocation.clearWatch(watchIdRef.current);
-            watchIdRef.current = null;
-        }
-
-        console.log("🛑 Tracking stopped");
-    };
-
-    // ================================
-    // 🚗 START RIDE
-    // ================================
-    const startRide = async (bookingId, rideId) => {
-        try {
-            await api.post(`/bookings/start/${bookingId}/`);
-
-            alert("Ride Started 🚗");
-
-            startTracking(rideId);
-
-            navigate(`/tracking/${rideId}`);
-
-        } catch (err) {
-            alert("Error starting ride");
-        }
-    };
-
-    // ================================
-    // 🎨 UI
-    // ================================
     return (
-        <div style={{ maxWidth: "900px", margin: "auto", padding: "20px" }}>
-            <h2>🚗 My Rides (Driver)</h2>
+        <div className="myrides-wrapper">
 
-            {loading && <p>Loading...</p>}
+            <div className="myrides-container">
 
-            {!loading && rides.length === 0 && (
-                <p>No rides found</p>
-            )}
+                <h2 className="title">🚗 My Rides</h2>
 
-            {rides.map((ride) => {
+                <div className="ride-list">
 
-                const rideStatus = (ride.status || "").toUpperCase();
+                    {rides.length === 0 ? (
+                        <p className="empty">No rides created yet</p>
+                    ) : (
+                        rides.map((ride) => (
 
-                return (
-                    <div key={ride.id} style={{
-                        border: "1px solid #ccc",
-                        margin: "15px 0",
-                        padding: "15px",
-                        borderRadius: "10px"
-                    }}>
-                        <h3>{ride.source} → {ride.destination}</h3>
-                        <p>📌 Ride Status: {rideStatus}</p>
+                            <div key={ride.id} className="ride-card glass">
 
-                        {/* 🚗 ACTIVE RIDE CONTROLS */}
-                        {["STARTED", "ACTIVE"].includes(rideStatus) && (
-                            <div style={{ marginBottom: "10px" }}>
+                                <div className="ride-left">
 
-                                <button
-                                    onClick={() => navigate(`/tracking/${ride.id}`)}
-                                    style={btnBlue}
-                                >
-                                    🚗 View Live Ride
-                                </button>
+                                    {/* ROUTE */}
+                                    <div className="route">
+                                        <span className="from">{ride.source}</span>
+                                        <span className="arrow">→</span>
+                                        <span className="to">{ride.destination}</span>
+                                    </div>
 
-                                <button
-                                    onClick={() => navigate(`/chat/${ride.id}`)}
-                                    style={btnGreen}
-                                >
-                                    💬 Chat
-                                </button>
+                                    {/* META */}
+                                    <div className="meta">
+                                        🕒 {new Date(ride.date_time).toLocaleString()}
+                                    </div>
 
-                                <button
-                                    onClick={stopTracking}
-                                    style={btnRed}
-                                >
-                                    🛑 Stop Tracking
-                                </button>
-                            </div>
-                        )}
-
-                        {/* 👥 BOOKINGS */}
-                        {ride.bookings?.map((b) => {
-
-                            const status = (b.status || "").toUpperCase();
-
-                            return (
-                                <div key={b.id} style={{ marginTop: "10px" }}>
-                                    <p>👤 {b.user_email}</p>
-                                    <p>Status: {status}</p>
-
-                                    {/* 🔥 ACCEPT */}
-                                    {status === "PENDING" && (
-                                        <button
-                                            onClick={() => acceptBooking(b.id)}
-                                            style={btnBlue}
-                                        >
-                                            Accept
-                                        </button>
-                                    )}
-
-                                    {/* 🔥 START RIDE (FIXED) */}
-                                    {status === "CONFIRMED" && (
-                                        <button
-                                            onClick={() => startRide(b.id, ride.id)}
-                                            style={btnGreen}
-                                        >
-                                            🚗 Start Ride
-                                        </button>
-                                    )}
+                                    {/* STATUS */}
+                                    <span className={`status ${ride.status.toLowerCase()}`}>
+                                        {ride.status}
+                                    </span>
 
                                 </div>
-                            );
-                        })}
-                    </div>
-                );
-            })}
+
+                                <button
+                                    className="btn-outline"
+                                    onClick={() =>
+                                        navigate(`/ride/${ride.id}`, { state: ride })
+                                    }
+                                >
+                                    View Details
+                                </button>
+
+                            </div>
+
+                        ))
+                    )}
+
+                </div>
+
+            </div>
+
         </div>
     );
 }
-
-// ================================
-// 🎨 BUTTON STYLES
-// ================================
-const btnBlue = {
-    background: "#2563eb",
-    color: "white",
-    padding: "6px 10px",
-    borderRadius: "5px",
-    marginRight: "10px",
-    border: "none",
-    cursor: "pointer"
-};
-
-const btnGreen = {
-    background: "#16a34a",
-    color: "white",
-    padding: "6px 10px",
-    borderRadius: "5px",
-    marginRight: "10px",
-    border: "none",
-    cursor: "pointer"
-};
-
-const btnRed = {
-    background: "red",
-    color: "white",
-    padding: "6px 10px",
-    borderRadius: "5px",
-    border: "none",
-    cursor: "pointer"
-};

@@ -17,9 +17,6 @@ export default function MyBookings() {
         try {
             setLoading(true);
             const res = await getMyBookings();
-
-            console.log("📦 BOOKINGS:", res.data);
-
             setBookings(Array.isArray(res.data) ? res.data : []);
         } catch (err) {
             console.error("❌ Fetch error:", err);
@@ -29,7 +26,7 @@ export default function MyBookings() {
     };
 
     const handleCancel = async (id) => {
-        if (!window.confirm("Are you sure you want to cancel?")) return;
+        if (!window.confirm("Cancel this booking?")) return;
 
         try {
             await cancelBooking(id);
@@ -55,44 +52,46 @@ export default function MyBookings() {
                 const status = (b.status || "").toUpperCase();
                 const paymentStatus = (b.payment_status || "").toUpperCase();
 
-                // 🔥 FIX rideId extraction
                 const rideId =
                     b.ride_id ||
                     b.ride?.id ||
                     (typeof b.ride === "number" ? b.ride : null);
 
-                // 🚗 TRACK ONLY WHEN RIDE STARTED
-                const canTrack =
-                    rideId && ["STARTED", "ACTIVE"].includes(status);
+                // ============================
+                // 🔥 LOGIC (FIXED)
+                // ============================
 
-                // 💬 CHAT AVAILABLE EARLY (CONFIRMED+)
+
+                const needsPayment =
+                    paymentStatus !== "paid" &&
+                    paymentStatus !== "pending";
+
                 const canChat =
-                    rideId && !["CANCELLED"].includes(status);
+                    ["CONFIRMED", "ACCEPTED", "STARTED", "ACTIVE"].includes(status);
 
-                console.log("🔍 DEBUG:", {
-                    id: b.id,
-                    status,
-                    rideId,
-                    canTrack,
-                    canChat
-                });
+                const canTrack =
+                    ["STARTED", "ACTIVE"].includes(status);
 
+                const canCancel =
+                    status === "PENDING";
+
+                // 🎨 STATUS COLORS
                 const statusColor =
                     status === "COMPLETED" ? "green" :
                         ["STARTED", "ACTIVE"].includes(status) ? "#2563eb" :
-                            status === "ACCEPTED" ? "orange" :
-                                status === "CONFIRMED" ? "purple" :
-                                    status === "CANCELLED" ? "red" :
-                                        "black";
+                            ["ACCEPTED", "CONFIRMED"].includes(status) ? "purple" :
+                                status === "CANCELLED" ? "red" :
+                                    "black";
 
                 return (
                     <div
                         key={b.id}
                         style={{
-                            border: "1px solid #ccc",
+                            border: "1px solid #ddd",
                             margin: "15px 0",
                             padding: "15px",
-                            borderRadius: "10px"
+                            borderRadius: "10px",
+                            background: status === "CANCELLED" ? "#fef2f2" : "#fff"
                         }}
                     >
                         <h3>{b.ride || "Ride"}</h3>
@@ -105,12 +104,14 @@ export default function MyBookings() {
 
                         <p>💳 Payment: {paymentStatus || "N/A"}</p>
 
-                        {/* 🚗 TRACKING */}
-                        {canTrack ? (
+                        {/* ============================
+                           💳 PAYMENT (NEW)
+                        ============================ */}
+                        {needsPayment && (
                             <button
-                                onClick={() => navigate(`/tracking/${rideId}`)}
+                                onClick={() => navigate(`/payment/${b.id}`)}
                                 style={{
-                                    background: "#2563eb",
+                                    background: "#f59e0b",
                                     color: "white",
                                     padding: "8px 12px",
                                     border: "none",
@@ -119,18 +120,16 @@ export default function MyBookings() {
                                     cursor: "pointer"
                                 }}
                             >
-                                🚗 Live Tracking
+                                💳 Pay Now
                             </button>
-                        ) : (
-                            <p style={{ fontSize: "13px", color: "gray" }}>
-                                Tracking not available
-                            </p>
                         )}
 
-                        {/* 💬 CHAT (UPDATED LOGIC) */}
-                        {canChat && (
+                        {/* ============================
+                           💬 CHAT (FIXED)
+                        ============================ */}
+                        {canChat && rideId && (
                             <button
-                                onClick={() => navigate(`/chat/${rideId}`)}
+                                onClick={() => navigate(`/chat/${b.id}`)}
                                 style={{
                                     background: "green",
                                     color: "white",
@@ -145,8 +144,30 @@ export default function MyBookings() {
                             </button>
                         )}
 
-                        {/* ❌ CANCEL */}
-                        {status === "PENDING" && (
+                        {/* ============================
+                           📍 TRACKING (STRICT)
+                        ============================ */}
+                        {canTrack && rideId && (
+                            <button
+                                onClick={() => navigate(`/tracking/${rideId}`)}
+                                style={{
+                                    background: "#2563eb",
+                                    color: "white",
+                                    padding: "8px 12px",
+                                    border: "none",
+                                    borderRadius: "6px",
+                                    marginRight: "10px",
+                                    cursor: "pointer"
+                                }}
+                            >
+                                🚗 Live Tracking
+                            </button>
+                        )}
+
+                        {/* ============================
+                           ❌ CANCEL
+                        ============================ */}
+                        {canCancel && (
                             <button
                                 onClick={() => handleCancel(b.id)}
                                 style={{
@@ -158,51 +179,42 @@ export default function MyBookings() {
                                     cursor: "pointer"
                                 }}
                             >
-                                Cancel Booking
+                                Cancel
                             </button>
                         )}
 
-                        {/* STATUS INFO */}
-                        {status === "CONFIRMED" && (
-                            <p style={{ color: "purple" }}>
-                                ✅ Booking confirmed — chat available
+                        {/* ============================
+                           🧠 USER GUIDANCE (UX)
+                        ============================ */}
+                        {needsPayment && (
+                            <p style={{ color: "#f59e0b" }}>
+                                ⚠️ Complete payment to confirm booking
                             </p>
                         )}
 
-                        {status === "ACCEPTED" && (
-                            <p style={{ color: "orange" }}>
-                                ⏳ Driver accepted — chat available
+                        {status === "CONFIRMED" && (
+                            <p style={{ color: "purple" }}>
+                                ✅ Driver confirmed — chat enabled
                             </p>
                         )}
 
                         {status === "STARTED" && (
                             <p style={{ color: "#2563eb" }}>
-                                🚗 Ride started — tracking + chat enabled
-                            </p>
-                        )}
-
-                        {status === "ACTIVE" && (
-                            <p style={{ color: "#2563eb" }}>
-                                📍 Ride in progress
+                                🚗 Ride started — tracking enabled
                             </p>
                         )}
 
                         {status === "COMPLETED" && (
                             <p style={{ color: "green" }}>
-                                ✅ Ride completed
+                                🎉 Ride completed
                             </p>
                         )}
 
                         {status === "CANCELLED" && (
                             <p style={{ color: "red" }}>
-                                ❌ Cancelled
+                                ❌ Booking cancelled
                             </p>
                         )}
-
-                        {/* DEBUG */}
-                        <p style={{ fontSize: "11px", color: "gray" }}>
-                            Debug → status: {b.status} | rideId: {rideId}
-                        </p>
                     </div>
                 );
             })}

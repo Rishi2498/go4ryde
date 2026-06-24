@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'chat',
     'tracking',
     'core',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -162,42 +163,94 @@ AUTH_USER_MODEL = 'accounts.User'
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True  # For dev
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 # DRF & JWT Settings
+from datetime import timedelta
+
 REST_FRAMEWORK = {
+
+    # 🔐 AUTH
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.SessionAuthentication',   # ✅ ADD THIS
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
-}
 
+    # 🚦 THROTTLING
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.AnonRateThrottle",
+    ],
+
+    "DEFAULT_THROTTLE_RATES": {
+        "user": "100/min",
+        "anon": "20/min",
+
+        # 💳 PAYMENTS
+        "create_payment": "5/min",
+        "verify_payment": "10/min",
+        "wallet_topup": "5/min",
+        "withdrawal": "3/min",
+
+        # 📦 BOOKINGS
+        "booking": "10/min",
+
+        # 🔐 AUTH
+        "send_otp": "3/min",
+        "verify_otp": "5/min",
+        "login": "5/min",
+
+        # 👤 USER
+        "profile": "20/min",
+        "driver_upgrade": "5/min",
+
+        # 📍 TRACKING
+        "driver_location_update": "30/min",
+        "driver_location_read": "60/min",
+
+        # 💬 CHAT
+        "chat_send": "20/min",
+        "chat_read": "60/min",
+        "chat_mark_read": "30/min",
+    }
+}
+ 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=6000),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
 
 # Channels Layer (Using In-Memory for easier local development without Redis)
 CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
     },
 }
 
 ASGI_APPLICATION = "go4ryde_backend.asgi.application"
 
-# CHANNEL_LAYERS = {
-#     "default": {
-#         "BACKEND": "channels_redis.core.RedisChannelLayer",
-#         "CONFIG": {
-#             "hosts": [("127.0.0.1", 6379)],
-#         },
-#     },
-# }
 
 # API Keys
 RAZORPAY_KEY_ID = 'rzp_test_SV8GuVVRipG8sE'

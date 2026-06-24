@@ -1,111 +1,264 @@
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    permission_classes,
+    throttle_classes,
+)
+from notifications.dispatcher import NotificationDispatcher
+
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
 
-from rides.models import Ride
-from chat.models import ChatRoom, Message
-from chat.serializers import MessageSerializer
+from django.shortcuts import get_object_or_404
+from django.core.cache import cache
+from django.utils import timezone
+
+from datetime import timedelta
 
 import re
 
+from bookings.models import Booking
 
-# -------------------------
-# 📥 GET CHAT MESSAGES
-# -------------------------
+from chat.models import ChatRoom, Message
+from chat.serializers import MessageSerializer
+from chat.throttles import *
+
+from chat.utils import can_access_chat
+
+
+# =========================================
+# 📥 GET MESSAGES
+# =========================================
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_chat_messages(request, ride_id):
+@throttle_classes([ChatReadThrottle])
+def get_messages(request, booking_id):
 
-    ride = get_object_or_404(Ride, id=ride_id)
+    booking = get_object_or_404(
+        Booking,
+        id=booking_id
+    )
 
-    room = ChatRoom.objects.filter(ride=ride).first()
+    room = ChatRoom.objects.filter(
+        booking=booking
+    ).first()
 
     if not room:
-        return Response([])
+        if booking.status in ["CONFIRMED", "STARTED", "ACTIVE"]:
+            room, _ = ChatRoom.objects.get_or_create(
+                booking=booking,
+                defaults={
+                    "driver": booking.ride.driver,
+                    "passenger": booking.user,
+                }
+            )
+        else:
+            return Response(
+                {"error": "Room not found"},
+                status=404
+            )
 
-    # ✅ NEW PERMISSION CHECK
-    if not room.participants.filter(id=request.user.id).exists():
-        return Response({"error": "Not allowed to chat"}, status=403)
+    # 🔐 ACCESS CHECK
+    if not can_access_chat(request.user, room):
 
-    messages = room.messages.select_related("sender")\
-        .order_by("-created_at")[:50]
+        return Response(
+            {"error": "Unauthorized"},
+            status=403
+        )
 
-    return Response(MessageSerializer(messages, many=True).data)
+    messages = room.messages.select_related(
+        "sender"
+    ).order_by("created_at")
+    serializer = MessageSerializer(
+    messages,
+    many=True,
+    context={"request": request}
+   )
+    return Response(serializer.data)
 
 
-# -------------------------
+# =========================================
 # 👁️ MARK READ
-# -------------------------
+# =========================================
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def mark_messages_read(request, ride_id):
+@throttle_classes([ChatMarkReadThrottle])
+def mark_read(request, booking_id):
 
-    ride = get_object_or_404(Ride, id=ride_id)
+    booking = get_object_or_404(
+        Booking,
+        id=booking_id
+    )
 
-    room = ChatRoom.objects.filter(ride=ride).first()
+    room = ChatRoom.objects.filter(
+        booking=booking
+    ).first()
 
     if not room:
-        return Response({"message": "No chat found"})
+        if booking.status in ["CONFIRMED", "STARTED", "ACTIVE"]:
+            room, _ = ChatRoom.objects.get_or_create(
+                booking=booking,
+                defaults={
+                    "driver": booking.ride.driver,
+                    "passenger": booking.user,
+                }
+            )
+        else:
+            return Response(
+                {"error": "Room not found"},
+                status=404
+            )
 
-    # ✅ NEW PERMISSION CHECK
-    if not room.participants.filter(id=request.user.id).exists():
-        return Response({"error": "Not allowed"}, status=403)
+    if not can_access_chat(request.user, room):
+
+        return Response(
+            {"error": "Unauthorized"},
+            status=403
+        )
 
     Message.objects.filter(
         room=room,
         is_read=False
-    ).exclude(sender=request.user).update(is_read=True)
+    ).exclude(
+        sender=request.user
+    ).update(is_read=True)
 
-    return Response({"message": "Messages marked as read"})
+    return Response({"message": "read"})
 
 
-# -------------------------
-# 📤 SEND MESSAGE (API fallback)
-# -------------------------
+# =========================================
+# 📤 SEND MESSAGE
+# =========================================
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def send_message_api(request, ride_id):
+@throttle_classes([ChatMessageSendThrottle])
+def send_message(request, booking_id):
 
-    ride = get_object_or_404(Ride, id=ride_id)
+    booking = get_object_or_404(
+        Booking,
+        id=booking_id
+    )
 
-    room = ChatRoom.objects.filter(ride=ride).first()
+    room = ChatRoom.objects.filter(
+        booking=booking
+    ).first()
 
     if not room:
-        return Response({"error": "Chat room not found"}, status=404)
+        if booking.status in ["CONFIRMED", "STARTED", "ACTIVE"]:
+            room, _ = ChatRoom.objects.get_or_create(
+                booking=booking,
+                defaults={
+                    "driver": booking.ride.driver,
+                    "passenger": booking.user,
+                }
+            )
+        else:
+            return Response(
+                {"error": "Room not found"},
+                status=404
+            )
 
-    # ✅ NEW PERMISSION CHECK
-    if not room.participants.filter(id=request.user.id).exists():
-        return Response({"error": "Not allowed"}, status=403)
+    # 🔐 ACCESS CHECK
+    if not can_access_chat(request.user, room):
 
-    text = request.data.get("message", "").strip()
+        return Response(
+            {"error": "Unauthorized"},
+            status=403
+        )
 
-    # ❌ VALIDATION
+    text = request.data.get(
+        "message",
+        ""
+    ).strip()
+
+    # ❌ EMPTY
     if not text:
-        return Response({"error": "Empty message"}, status=400)
 
+        return Response(
+            {"error": "Empty message"},
+            status=400
+        )
+
+    # ❌ TOO LONG
     if len(text) > 500:
-        return Response({"error": "Message too long"}, status=400)
 
-    # 🚫 Abuse filter
-    if any(word in text.lower() for word in ["spam", "abuse"]):
-        return Response({"error": "Message blocked"}, status=400)
+        return Response(
+            {"error": "Too long"},
+            status=400
+        )
 
-    # 🚫 Phone restriction (before ride start)
-    if ride.status != "ACTIVE" and re.search(r"\b\d{10}\b", text):
-        return Response({"error": "Phone sharing not allowed yet"}, status=400)
+    # ❌ SPAM
+    if any(
+        word in text.lower()
+        for word in ["spam", "abuse"]
+    ):
 
-    # ✅ CREATE MESSAGE
+        return Response(
+            {"error": "Blocked"},
+            status=400
+        )
+
+    # 🔥 RATE LIMIT
+    cache_key = f"chat_{request.user.id}"
+
+    if cache.get(cache_key):
+
+        return Response(
+            {"error": "Too fast"},
+            status=429
+        )
+
+    cache.set(cache_key, True, timeout=1)
+
+    # 🔥 DUPLICATE BLOCK
+    last_msg = Message.objects.filter(
+        room=room,
+        sender=request.user,
+        text=text
+    ).order_by("-created_at").first()
+
+    if (
+        last_msg
+        and
+        (
+            timezone.now()
+            - last_msg.created_at
+        ) < timedelta(seconds=5)
+    ):
+
+        return Response(
+            {"error": "Duplicate"},
+            status=429
+        )
+
+    # ✅ CREATE
     message = Message.objects.create(
         room=room,
         sender=request.user,
         text=text
     )
-
+    serializer = MessageSerializer(
+    message,
+    context={"request": request}
+    )
+    NotificationDispatcher.trigger(
+    "NEW_CHAT_MESSAGE",
+    message,
+    sender_name=message.sender.username,
+    metadata={
+        "route": f"/chat/{booking.id}"
+    }
+)
     return Response({
+
         "id": message.id,
+
         "message": message.text,
+
         "sender": request.user.email,
+
         "timestamp": message.created_at,
-        "status": "sent"
+
+        "status": "sent",
+        'serializer': serializer.data
+
     })
