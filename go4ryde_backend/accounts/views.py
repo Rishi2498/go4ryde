@@ -172,7 +172,7 @@ class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
+        username = serializer.validated_data['username']
         email = serializer.validated_data['email']
         phone = serializer.validated_data['phone']
         otp_input = serializer.validated_data['otp']

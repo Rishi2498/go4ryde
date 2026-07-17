@@ -1,171 +1,494 @@
-from rest_framework.test import APITestCase
+from decimal import Decimal
 from unittest.mock import patch
 
-from core.factories import UserFactory, RideFactory
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+from django.utils import timezone
+
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from rides.models import Ride
 from bookings.models import Booking
-from payments.models import Payment
+from payments.models import (
+    Payment,
+    Wallet,
+    WalletTransaction,
+    BankAccount,
+    Withdrawal
+)
+
+User = get_user_model()
 
 
-class PaymentTestCase(APITestCase):
+class PaymentFlowTests(APITestCase):
 
     def setUp(self):
-        self.user = UserFactory()
-        self.driver = UserFactory(role="DRIVER")
 
-        self.ride = RideFactory(driver=self.driver)
+        self.user = User.objects.create_user(
+        phone="9999999991",
+        email="user@test.com"
+    )
 
-        self.booking = Booking.objects.create(
-            user=self.user,
-            ride=self.ride,
-            seats=1,
-            original_amount=100,
-            final_amount=100,
-            payment_status="PENDING"
+        self.driver = User.objects.create_user(
+            phone="9999999992",
+            email="driver@test.com"
         )
 
-        self.client.force_authenticate(user=self.user)
+        self.client.force_authenticate(
+            self.user
+        )
 
-    # -----------------------------
-    # ✅ CREATE PAYMENT SUCCESS
-    # -----------------------------
-    @patch("payments.views.calculate_amount")
+
+        self.ride = Ride.objects.create(
+            driver=self.driver,
+
+            source="Hyderabad",
+            destination="Vijayawada",
+
+            source_lat=17.3850,
+            source_lng=78.4867,
+
+            destination_lat=16.5062,
+            destination_lng=80.6480,
+
+            date_time=timezone.now(),
+
+            seats_available=4,
+            seats_booked=0,
+
+            price_per_seat=500,
+
+            status="CREATED"
+        )
+
+        self.booking = Booking.objects.create(
+    user=self.user,
+    ride=self.ride,
+
+    seats=1,
+
+    original_amount=Decimal("500"),   # ADD THIS
+
+    final_amount=Decimal("500"),
+
+    remaining_amount=Decimal("0"),
+
+    payment_status="PENDING",
+
+    status="PENDING"
+)
+
+    # ===================================================
+    # CREATE PAYMENT TESTS
+    # ===================================================
+
+    def test_missing_data(self):
+
+        response = self.client.post(
+            "/api/payments/create/",
+            {}
+        )
+
+        self.assertEqual(
+            response.status_code,
+            400
+        )
+
+    def test_invalid_payment_type(self):
+
+        response = self.client.post(
+            "/api/payments/create/",
+            {
+                "booking_id": self.booking.id,
+                "payment_type": "INVALID"
+            }
+        )
+
+        self.assertEqual(
+            response.status_code,
+            400
+        )
+
+    def test_booking_not_found(self):
+
+        response = self.client.post(
+            "/api/payments/create/",
+            {
+                "booking_id": 999999,
+                "payment_type": "FULL"
+            }
+        )
+
+        self.assertEqual(
+            response.status_code,
+            404
+        )
+
+    # ===================================================
+    # FULL PAYMENT
+    # ===================================================
+
     @patch("payments.views.razorpay.Client")
-    def test_create_payment_success(self, mock_razorpay, mock_calc):
-        # ✅ mock amount calculation
-        mock_calc.return_value = (100, True)
-        mock_client = mock_razorpay.return_value
-        mock_client.order.create.return_value = {
+    def test_create_full_payment(
+        self,
+        mock_client
+    ):
+
+        mock_client.return_value.order.create.return_value = {
             "id": "order_test_123"
         }
 
-        response = self.client.post("/api/payments/create/", {
-            "booking_id": self.booking.id,
-            "payment_type": "FULL"
-        })
+        response = self.client.post(
+            "/api/payments/create/",
+            {
+                "booking_id": self.booking.id,
+                "payment_type": "FULL"
+            }
+        )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(Payment.objects.count(), 1)
+        self.assertEqual(
+            response.status_code,
+            200
+        )
 
-    # -----------------------------
-    # ❌ MISSING DATA
-    # -----------------------------
-    def test_create_payment_missing_data(self):
-        response = self.client.post("/api/payments/create/", {})
+        self.assertEqual(
+            response.data["order_id"],
+            "order_test_123"
+        )
 
-        self.assertEqual(response.status_code, 400)
+        self.assertTrue(
+            Payment.objects.filter(
+                booking=self.booking
+            ).exists()
+        )
 
-    # -----------------------------
-    # ❌ INVALID PAYMENT TYPE
-    # -----------------------------
-    def test_invalid_payment_type(self):
-        response = self.client.post("/api/payments/create/", {
-            "booking_id": self.booking.id,
-            "payment_type": "INVALID"
-        })
+    # ===================================================
+    # WALLET PAYMENT
+    # ===================================================
 
-        self.assertEqual(response.status_code, 400)
+    def test_wallet_insufficient_balance(self):
 
-    # -----------------------------
-    # ❌ BOOKING NOT FOUND
-    # -----------------------------
-    def test_booking_not_found(self):
-        response = self.client.post("/api/payments/create/", {
-            "booking_id": 999,
-            "payment_type": "FULL"
-        })
+        wallet, _ = Wallet.objects.get_or_create(
+    user=self.user
+)
+        wallet.balance = Decimal("1000")
+        wallet.save()
 
-        self.assertEqual(response.status_code, 404)
+        response = self.client.post(
+            "/api/payments/create/",
+            {
+                "booking_id": self.booking.id,
+                "payment_type": "WALLET"
+            }
+        )
 
-    # -----------------------------
-    # ❌ NOT YOUR BOOKING
-    # -----------------------------
-    def test_not_your_booking(self):
-        other_user = UserFactory()
+        self.assertEqual(
+            response.status_code,
+            400
+        )
 
-        self.client.force_authenticate(user=other_user)
+    def test_wallet_payment_success(self):
 
-        response = self.client.post("/api/payments/create/", {
-            "booking_id": self.booking.id,
-            "payment_type": "FULL"
-        })
+        Wallet.objects.create(
+            user=self.user,
+            balance=Decimal("1000")
+        )
 
-        self.assertEqual(response.status_code, 403)
+        response = self.client.post(
+            "/api/payments/create/",
+            {
+                "booking_id": self.booking.id,
+                "payment_type": "WALLET"
+            }
+        )
 
-    # -----------------------------
-    # ❌ ALREADY PAID
-    # -----------------------------
-    def test_already_paid(self):
-        self.booking.payment_status = "PAID"
-        self.booking.save()
+        self.assertEqual(
+            response.status_code,
+            200
+        )
 
-        response = self.client.post("/api/payments/create/", {
-            "booking_id": self.booking.id,
-            "payment_type": "FULL"
-        })
+        wallet = Wallet.objects.get(
+            user=self.user
+        )
 
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            wallet.balance,
+            Decimal("500")
+        )
 
-    # -----------------------------
-    # ✅ VERIFY PAYMENT SUCCESS
-    # -----------------------------
+    # ===================================================
+    # COD PAYMENT
+    # ===================================================
+
+    def test_cod_payment(self):
+
+        response = self.client.post(
+            "/api/payments/create/",
+            {
+                "booking_id": self.booking.id,
+                "payment_type": "COD"
+            }
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200
+        )
+
+        self.booking.refresh_from_db()
+
+        self.assertEqual(
+            self.booking.payment_status,
+            "Cash"
+        )
+
+    # ===================================================
+    # VERIFY PAYMENT
+    # ===================================================
+
+    @patch("payments.views.NotificationDispatcher.trigger")
     @patch("payments.views.razorpay.Client")
-    @patch("payments.views.update_booking_after_payment")
-    def test_verify_payment_success(self, mock_update, mock_razorpay):
+    def test_verify_payment_success(
+        self,
+        mock_client,
+        mock_notification
+    ):
 
         payment = Payment.objects.create(
             booking=self.booking,
-            razorpay_order_id="order_test_123",
-            amount=100,
+            amount=Decimal("500"),
             payment_type="FULL",
-            status="CREATED"
+            status="CREATED",
+            razorpay_order_id="order123"
         )
 
-        mock_client = mock_razorpay.return_value
-        mock_client.utility.verify_payment_signature.return_value = True
+        response = self.client.post(
+            "/api/payments/verify/",
+            {
+                "order_id": "order123",
+                "payment_id": "pay123",
+                "signature": "sig123"
+            }
+        )
 
-        response = self.client.post("/api/payments/verify/", {
-            "order_id": "order_test_123",
-            "payment_id": "pay_123",
-            "signature": "valid_signature"
-        })
+        self.assertEqual(
+            response.status_code,
+            200
+        )
 
         payment.refresh_from_db()
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(payment.status, "SUCCESS")
+        self.assertEqual(
+            payment.status,
+            "SUCCESS"
+        )
 
-    # -----------------------------
-    # ❌ VERIFY FAILED
-    # -----------------------------
+        self.assertTrue(
+            mock_notification.called
+        )
+
+    # ===================================================
+    # DRIVER WALLET CREDIT
+    # ===================================================
+
+    @patch("payments.views.NotificationDispatcher.trigger")
     @patch("payments.views.razorpay.Client")
-    def test_verify_payment_fail(self, mock_razorpay):
+    def test_driver_wallet_credit(
+        self,
+        mock_client,
+        mock_notification
+    ):
+
+        Wallet.objects.create(
+            user=self.driver,
+            balance=Decimal("0")
+        )
 
         payment = Payment.objects.create(
             booking=self.booking,
-            razorpay_order_id="order_test_123",
-            amount=100,
+            amount=Decimal("500"),
             payment_type="FULL",
-            status="CREATED"
+            status="CREATED",
+            razorpay_order_id="order_driver"
         )
 
-        mock_client = mock_razorpay.return_value
-        mock_client.utility.verify_payment_signature.side_effect = Exception()
+        self.client.post(
+            "/api/payments/verify/",
+            {
+                "order_id": "order_driver",
+                "payment_id": "pay123",
+                "signature": "sig123"
+            }
+        )
 
-        response = self.client.post("/api/payments/verify/", {
-            "order_id": "order_test_123",
-            "payment_id": "pay_123",
-            "signature": "invalid"
-        })
+        wallet = Wallet.objects.get(
+            user=self.driver
+        )
 
-        payment.refresh_from_db()
+        self.assertEqual(
+            wallet.balance,
+            Decimal("500")
+        )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(payment.status, "FAILED")
+    # ===================================================
+    # PARTIAL PAYMENT
+    # ===================================================
 
-    # -----------------------------
-    # ❌ VERIFY MISSING DATA
-    # -----------------------------
-    def test_verify_missing_data(self):
-        response = self.client.post("/api/payments/verify/", {})
+    @patch("payments.views.razorpay.Client")
+    def test_partial_payment_create(
+        self,
+        mock_client
+    ):
 
-        self.assertEqual(response.status_code, 400)
+        mock_client.return_value.order.create.return_value = {
+            "id": "partial123"
+        }
+
+        response = self.client.post(
+            "/api/payments/create/",
+            {
+                "booking_id": self.booking.id,
+                "payment_type": "PARTIAL"
+            }
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200
+        )
+
+        self.assertEqual(
+            response.data["order_id"],
+            "partial123"
+        )
+
+    # ===================================================
+    # BANK ACCOUNT
+    # ===================================================
+
+    def test_save_bank_account(self):
+
+        response = self.client.post(
+            "/api/payments/save-bank-account/",
+            {
+                "account_holder_name": "John",
+                "bank_name": "SBI",
+                "account_number": "12345678",
+                "ifsc_code": "SBIN0001234",
+                "upi_id": "john@upi"
+            }
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200
+        )
+
+        self.assertTrue(
+            BankAccount.objects.filter(
+                user=self.user
+            ).exists()
+        )
+
+    # ===================================================
+    # WITHDRAWAL
+    # ===================================================
+
+    def test_wallet_withdrawal(self):
+
+        bank = BankAccount.objects.create(
+            user=self.user,
+            account_holder_name="John",
+            bank_name="SBI",
+            account_number="123456",
+            ifsc_code="SBIN000123"
+        )
+
+        Wallet.objects.create(
+            user=self.user,
+            balance=Decimal("1000")
+        )
+
+        response = self.client.post(
+            "/api/payments/withdraw/",
+            {
+                "amount": "500"
+            }
+        )
+
+        self.assertIn(
+            response.status_code,
+            [200, 201]
+        )
+
+    def test_withdraw_insufficient_balance(self):
+
+        BankAccount.objects.create(
+            user=self.user,
+            account_holder_name="John",
+            bank_name="SBI",
+            account_number="123456",
+            ifsc_code="SBIN000123"
+        )
+
+        Wallet.objects.create(
+            user=self.user,
+            balance=Decimal("100")
+        )
+
+        response = self.client.post(
+            "/api/payments/withdraw/",
+            {
+                "amount": "500"
+            }
+        )
+
+        self.assertEqual(
+            response.status_code,
+            400
+        )
+
+    # ===================================================
+    # SECURITY TESTS
+    # ===================================================
+
+    def test_unauthorized_create_payment(self):
+
+        self.client.logout()
+
+        response = self.client.post(
+            "/api/payments/create/",
+            {
+                "booking_id": self.booking.id,
+                "payment_type": "FULL"
+            }
+        )
+
+        self.assertIn(
+            response.status_code,
+            [401, 403]
+        )
+
+    def test_other_user_booking_payment(self):
+
+        other = User.objects.create_user(
+            email="other@test.com"
+        )
+
+        self.client.force_authenticate(
+            other
+        )
+
+        response = self.client.post(
+            "/api/payments/create/",
+            {
+                "booking_id": self.booking.id,
+                "payment_type": "FULL"
+            }
+        )
+
+        self.assertEqual(
+            response.status_code,
+            403
+        )

@@ -581,15 +581,16 @@ export default function ProfilePage() {
                     {profile.email?.charAt(0)?.toUpperCase()}
                   </div>
 
-                  <h3>
-                    {profile.email}
-                  </h3>
+                 <h3>
+  {profile.username?.trim() || profile.email?.split("@")[0]}
+</h3>
 
                   <p>{role}</p>
 
                   <p>
     📞 {profile.phone}
 </p>
+<p>{profile.email}</p>
 
                 </div>
 

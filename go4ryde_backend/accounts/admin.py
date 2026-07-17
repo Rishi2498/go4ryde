@@ -6,7 +6,7 @@ from django.utils.html import format_html
 # ---------------- USER ADMIN ----------------
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ("email", "phone", "role", "is_active", "is_staff")
+    list_display = ("username", "email", "phone", "role", "is_active", "is_staff")
     list_filter = ("role", "is_active", "is_staff")
     search_fields = ("email", "phone")
 
@@ -14,7 +14,7 @@ class UserAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ("Basic Info", {
-            "fields": ("email", "phone", "role")
+            "fields": ("username", "email", "phone", "role")
         }),
         ("Permissions", {
             "fields": ("is_active", "is_staff", "is_superuser")

@@ -43,7 +43,7 @@ class User(AbstractUser):
         ('ADMIN', 'Admin'),
     )
 
-    username = None
+    username = models.CharField(max_length=150, unique=False, blank=True, null=True)  # Allow blank usernames
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=10, unique=True)
 

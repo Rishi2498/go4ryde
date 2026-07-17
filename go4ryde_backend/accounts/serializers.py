@@ -6,6 +6,7 @@ from payments.serializers import BankAccountSerializer
 
 # ---------------- REGISTER ----------------
 class RegisterSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
     email = serializers.EmailField()
     phone = serializers.CharField(max_length=10)
     otp = serializers.CharField(max_length=6)
