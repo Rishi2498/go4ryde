@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+db.sqlite3
+media/
+staticfiles/
+
+# Node
+node_modules/
+dist/
+build/
+.eslintcache
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary duplicate mobile source
+/frontend-source-temp/
+
+# React Native dependencies and generated builds
+**/node_modules/
+reactapp/frontend/android/.gradle/
+reactapp/frontend/android/app/build/
+reactapp/frontend/ios/Pods/
+reactapp/frontend/ios/build/
+reactapp/frontend/.bundle/
+
+# Local credentials and signing files
+**/.env
+**/.env.*
+**/debug.keystore
+**/google-services.json
+**/*service-account*.json
+**/*firebase-admin*.json
+
+# Databases and backups
+*.sqlite3
+*.sqlite3-*
+*.db
+*.backup
+
+# Generated bundles and diagnostic logs
+**/metro-bundle.js
+**/android-error.txt
+**/notification-debug.txt
+**/firebase-service-output.txt
+**/error.txt
+
+# Accidental files from earlier terminal commands
+/-remote --heads github-target productions-ready
+/h -u github-target productions-ready
+
+# Additional local-only files
+/reactapp/frontend/android/app/debug.keystore
+/go4ryde_frontend_list.txt
+
+# Python virtual environments
+.venv/
+**/.venv/
+**/venv/
+
+# Local Xcode environment files
+**/ios/.xcode.env
+
+
+# Allow safe environment templates
+!.env.example
+!**/.env.example
+
+# Test coverage
+.coverage
+.coverage.*
+htmlcov/

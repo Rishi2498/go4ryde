@@ -1,0 +1,146 @@
+/* PAGE */
+.myrides-wrapper {
+    min-height: 100vh;
+    background: #f9fafb;
+    padding: 120px 20px;
+}
+
+/* CONTAINER */
+.myrides-container {
+    max-width: 900px;
+    margin: auto;
+}
+
+/* TITLE */
+.title {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 800;
+    margin-bottom: 30px;
+    color: black
+}
+
+/* LIST */
+.ride-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* CARD */
+.ride-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    padding: 18px;
+    border-radius: 16px;
+
+    transition: 0.25s;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.ride-card:hover {
+    transform: translateY(-3px);
+}
+
+/* GLASS */
+.glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
+/* LEFT */
+.ride-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    width: 100%;
+}
+
+/* ROUTE */
+.route {
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    gap: 6px;
+
+    max-width: 500px;
+    width: 100%;
+    min-width: 0;
+}
+
+/* truncate long text */
+.route span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: black;
+    display: block;
+    min-width: 0;
+}
+
+.arrow {
+    color: #888;
+}
+
+/* META */
+.meta {
+    font-size: 13px;
+    color: #666;
+}
+
+/* STATUS */
+.status {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    width: fit-content;
+}
+
+/* STATUS COLORS */
+.status.created {
+    background: #e0f2fe;
+    color: #0284c7;
+}
+
+.status.active {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.status.completed {
+    background: #f3f4f6;
+    color: #444;
+}
+
+/* BUTTON */
+.btn-outline {
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    background: white;
+    cursor: pointer;
+}
+
+/* EMPTY */
+.empty {
+    text-align: center;
+    color: #777;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+    .ride-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .btn-outline {
+        width: 100%;
+    }
+}
